@@ -379,7 +379,19 @@
       <button class="btn" id="testVoice">▶ 들어보기</button>
     </div>
     <div class="setrow" style="display:block">
-      <div class="lab" style="margin-bottom:7px">경고 음성 문구</div>
+      <div class="lab" style="margin-bottom:5px">🎤 내 목소리로 경고 <span style="color:var(--accent)">(가장 확실)</span></div>
+      <div class="tnote" style="margin-top:0">
+        폰에서 음성이 안 나올 때 쓰세요. 직접 녹음한 소리를 그대로 재생하므로 어떤 폰에서도 작동합니다.
+      </div>
+      <div class="addrow" style="margin-top:8px">
+        <button class="btn" id="recBtn" style="flex:1">● 녹음 시작</button>
+        <button class="btn" id="recPlay">▶ 듣기</button>
+        <button class="btn" id="recDel">삭제</button>
+      </div>
+      <div class="tnote" id="recInfo" style="margin-top:7px"></div>
+    </div>
+    <div class="setrow" style="display:block">
+      <div class="lab" style="margin-bottom:7px">경고 음성 문구 <span style="font-weight:600;color:var(--dim);font-size:10.5px">(녹음이 없을 때 사용)</span></div>
       <div class="addrow" style="margin-top:0">
         <input id="phraseInput" placeholder="찡찡 조심해" maxlength="30" />
         <button class="btn" id="savePhrase">저장</button>
@@ -719,6 +731,7 @@ $('modeDoor').onclick=function(){ setDetect('door'); };
 initAccordion();
 initKnowledge();
 try{ updateVoiceInfo(); }catch(e){}
+try{ updateRecInfo(); }catch(e){}
 setDetect(state.detect);
 
 /* 출입 카운터 설정 */
@@ -1443,28 +1456,131 @@ function primeVoice(){
   }catch(e){}
 }
 
+/* ── 🎤 내 목소리 녹음 (음성엔진이 없는 폰을 위한 확실한 방법) ── */
+state.rec = '';
+try{ state.rec = localStorage.getItem('vlm_recaudio') || ''; }catch(e){}
+var mediaRec=null, recChunks=[], recTimer=null;
+
+function updateRecInfo(){
+  var el=$('recInfo'); if(!el) return;
+  el.textContent = state.rec
+    ? '✅ 녹음됨 — 경고 시 이 목소리가 3번 재생됩니다.'
+    : '녹음이 없으면 폰의 기계 음성으로 말합니다.';
+  el.style.color = state.rec ? 'var(--success)' : 'var(--dim)';
+}
+
+function stopRec(){
+  if(recTimer){ clearTimeout(recTimer); recTimer=null; }
+  try{ if(mediaRec && mediaRec.state==='recording') mediaRec.stop(); }catch(e){}
+}
+
+if($('recBtn')) $('recBtn').onclick=function(){
+  if(mediaRec && mediaRec.state==='recording'){ stopRec(); return; }
+  if(!navigator.mediaDevices || !window.MediaRecorder){
+    alert('이 브라우저는 녹음을 지원하지 않습니다.'); return;
+  }
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    recChunks=[];
+    mediaRec=new MediaRecorder(stream);
+    mediaRec.ondataavailable=function(e){ if(e.data && e.data.size) recChunks.push(e.data); };
+    mediaRec.onstop=function(){
+      try{ stream.getTracks().forEach(function(t){t.stop();}); }catch(e){}
+      var blob=new Blob(recChunks,{type:(mediaRec.mimeType||'audio/webm')});
+      var fr=new FileReader();
+      fr.onload=function(){
+        try{
+          localStorage.setItem('vlm_recaudio', fr.result);
+          state.rec=fr.result;
+        }catch(e){
+          alert('녹음이 너무 깁니다. 2~3초로 짧게 다시 녹음해주세요.');
+          state.rec='';
+        }
+        updateRecInfo();
+        $('recBtn').textContent='● 다시 녹음';
+        playRec(1);            // 방금 녹음한 소리 확인
+      };
+      fr.readAsDataURL(blob);
+    };
+    mediaRec.start();
+    $('recBtn').textContent='■ 중지 (지금 말하세요)';
+    recTimer=setTimeout(stopRec, 4000);   // 최대 4초
+  }).catch(function(e){
+    alert('마이크 권한이 필요합니다. 브라우저에서 허용해주세요.');
+  });
+};
+
+if($('recPlay')) $('recPlay').onclick=function(){
+  if(!state.rec){ alert('먼저 녹음하세요.'); return; }
+  playRec(1);
+};
+if($('recDel')) $('recDel').onclick=function(){
+  state.rec='';
+  try{ localStorage.removeItem('vlm_recaudio'); }catch(e){}
+  updateRecInfo();
+  if($('recBtn')) $('recBtn').textContent='● 녹음 시작';
+};
+
+// 녹음된 목소리를 n번 재생
+function playRec(times){
+  if(!state.rec) return false;
+  var n=times||3, i=0;
+  try{
+    var a=new Audio(state.rec);
+    a.volume=1;
+    a.onended=function(){
+      i++;
+      if(i<n){ try{ a.currentTime=0; a.play(); }catch(e){} }
+    };
+    var p=a.play();
+    if(p && p.catch) p.catch(function(){});
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ── 경고 음성 재생 ──
+   ① 녹음한 목소리가 있으면 그것을 재생 (가장 확실)
+   ② 없으면 폰의 음성엔진(TTS)으로 말하기
+   ③ 그것도 실패하면 경고음으로 대체 */
 function speakAlert(force){
   if(!force && !state.voice) return;
+
+  if(playRec(3)) return;                    // ① 녹음 우선
+
   if(typeof window==='undefined' || !window.speechSynthesis){
-    if(!force) alarm();          // 음성 미지원 기기 → 경고음으로 대체
-    return;
+    alarm(); return;                        // ③ 음성 미지원
   }
+
   try{
-    window.speechSynthesis.cancel();          // 이전 음성 제거
-    var v = pickVoice();
     var text = state.phrase || '확인 필요';
-    for(var i=0;i<3;i++){                     // 3번 반복
+    var v = pickVoice();
+    var spoken = false, count = 0;
+
+    function speakOnce(){
       var u=new window.SpeechSynthesisUtterance(text);
       u.lang = (v && v.lang) ? v.lang : 'ko-KR';
       if(v) u.voice = v;
       u.rate=1.0; u.pitch=1.1; u.volume=1;
+      u.onstart=function(){ spoken=true; };
+      u.onend=function(){ count++; if(count<3) setTimeout(speakOnce,120); };
+      u.onerror=function(){ if(!spoken && count===0) alarm(); };
       window.speechSynthesis.speak(u);
     }
-    // 일부 기기에서 재생이 멈춰 있는 경우 재개
+    speakOnce();
+
+    // 1.5초 안에 소리가 안 나면 음성엔진이 없는 것으로 보고 경고음 대체
+    setTimeout(function(){
+      if(!spoken){
+        try{ window.speechSynthesis.cancel(); }catch(e){}
+        alarm();
+        if($('voiceInfo')) $('voiceInfo').textContent =
+          '⚠️ 이 폰에서 음성이 재생되지 않습니다. 위의 "🎤 내 목소리로 경고"를 사용하세요.';
+      }
+    }, 1500);
+
     setTimeout(function(){
       try{ if(window.speechSynthesis.paused) window.speechSynthesis.resume(); }catch(e){}
     }, 200);
-  }catch(e){}
+  }catch(e){ alarm(); }
 }
 
 /* ===== 알림 ===== */
