@@ -1,0 +1,27 @@
+{
+  "name": "100°10 AI 감시카메라",
+  "short_name": "100°10 감시",
+  "description": "구형 휴대폰을 AI 감시카메라로. 움직임을 자체 감지하고 이상 상황만 AI가 판단합니다.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0B0F",
+  "theme_color": "#0B0B0F",
+  "lang": "ko",
+  "categories": ["utilities", "security"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "관리자 화면",
+      "short_name": "관리자",
+      "description": "감지 기록과 사용량 확인",
+      "url": "./admin.html",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

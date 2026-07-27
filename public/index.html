@@ -6,7 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0B0B0F" />
-<title>100°10 AI 감시카메라 (서버 연동)</title>
+<title>100°10 AI 감시카메라</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="apple-mobile-web-app-title" content="100°10 감시" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <style>
   :root{
     --bg:#0B0B0F; --surface:#16161D; --surface2:#1F1F29; --border:#2A2A36;
@@ -166,6 +171,8 @@
     <div class="logo">100<b>°10</b> AI 감시 <span style="font-size:10px;color:var(--dim);font-weight:600">서버판</span></div>
     <div class="live" id="liveInd"><span class="led"></span><span id="liveTxt">대기중</span></div>
   </header>
+
+  <button class="full hidden" id="installBtn" style="margin:0 0 12px">📲 홈 화면에 앱으로 설치</button>
 
   <div class="card">
     <div class="keyrow">
@@ -415,6 +422,23 @@
 
 <script>
 var $=function(id){return document.getElementById(id);};
+
+/* ===== 앱 설치(PWA) =====
+   홈 화면에 아이콘으로 설치되어, 주소창 없이 전체화면으로 열린다. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+var deferredInstall=null;
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  deferredInstall=e;
+  var b=$('installBtn'); if(b) b.classList.remove('hidden');
+});
+window.addEventListener('appinstalled', function(){
+  var b=$('installBtn'); if(b) b.classList.add('hidden');
+});
 
 /* 속도 우선 / 정확도 우선 모델 */
 var MODEL_FAST='claude-haiku-4-5-20251001';   // 빠름 (1~2초)
@@ -786,6 +810,15 @@ if(state.key)    $('apikey').value=state.key;
 if(state.server) $('serverUrl').value=state.server;
 
 $('saveKey').onclick=function(){ connectServer(); };
+
+if($('installBtn')) $('installBtn').onclick=function(){
+  if(!deferredInstall){
+    alert('설치 안내\n\n· 안드로이드 크롬: 메뉴(⋮) → "앱 설치" 또는 "홈 화면에 추가"\n· 아이폰 사파리: 공유 버튼 → "홈 화면에 추가"');
+    return;
+  }
+  deferredInstall.prompt();
+  deferredInstall.userChoice.then(function(){ deferredInstall=null; $('installBtn').classList.add('hidden'); });
+};
 
 function normalizeUrl(u){
   u=String(u||'').trim().replace(/\/+$/,'');
