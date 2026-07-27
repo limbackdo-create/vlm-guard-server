@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0B0B0F" />
+<title>100°10 AI 감시카메라 (서버 연동)</title>
+<style>
+  :root{
+    --bg:#0B0B0F; --surface:#16161D; --surface2:#1F1F29; --border:#2A2A36;
+    --primary:#FF6B2C; --primary-soft:#FF8A5B; --accent:#FFC53D;
+    --text:#F5F5F7; --dim:#A0A0AD; --danger:#FF5A5A; --warn:#FFC53D; --success:#3DDC97;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+  .wrap{max-width:520px;margin:0 auto;padding:16px 14px 50px}
+  header{display:flex;align-items:center;justify-content:space-between;margin:2px 0 12px}
+  .logo{font-size:20px;font-weight:900}
+  .logo b{color:var(--primary)}
+  .live{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:var(--dim)}
+  .live .led{width:9px;height:9px;border-radius:50%;background:var(--border)}
+  .live.on{color:var(--danger)}
+  .live.on .led{background:var(--danger);animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.25}}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:11px}
+  .sec{font-size:12.5px;font-weight:800;margin:16px 0 8px;display:block}
+  .sec .hint{font-weight:600;color:var(--dim);font-size:10.5px;margin-left:4px}
+
+  .keyrow{display:flex;gap:8px;align-items:center}
+  .keyrow input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+    color:var(--text);padding:10px 12px;font-size:13px}
+  .keyrow input::placeholder{color:var(--dim)}
+  .btn{background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);
+    font-weight:700;padding:10px 15px;font-size:13px;cursor:pointer}
+  .keystate{font-size:11px;color:var(--dim);margin-top:5px}
+  .keystate.ok{color:var(--success)}
+
+  .camwrap{position:relative;border-radius:16px;overflow:hidden;background:#000;aspect-ratio:4/3}
+  video{width:100%;height:100%;object-fit:cover;display:block}
+  .camoff{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;color:var(--dim);padding:20px}
+  .camoff .emj{font-size:40px;margin-bottom:10px}
+  .ovl{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.6);border-radius:8px;
+    padding:5px 10px;font-size:11px;font-weight:700}
+  .ovl.r{left:auto;right:10px}
+  .motionbar{position:absolute;bottom:0;left:0;height:4px;background:var(--primary);width:0%;transition:width .2s}
+  .flash{position:absolute;inset:0;border:4px solid var(--danger);border-radius:16px;opacity:0;pointer-events:none}
+  .flash.on{animation:fl .6s ease-out}
+  @keyframes fl{0%{opacity:1}100%{opacity:0}}
+
+  /* 화면 경고 표시 */
+  .alertbox{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;text-align:center;padding:18px;pointer-events:none}
+  .alertbox.hidden{display:none}
+  .alertbox .big{font-size:52px;font-weight:900;letter-spacing:6px;line-height:1.1;
+    text-shadow:0 3px 14px rgba(0,0,0,.9), 0 0 30px currentColor}
+  .alertbox .why{font-size:13px;font-weight:700;margin-top:10px;max-width:90%;
+    background:rgba(0,0,0,.7);padding:7px 13px;border-radius:10px;line-height:1.45;color:#fff}
+  .alertbox.lv-alert{background:rgba(255,90,90,.22);animation:pulseA 1s infinite}
+  .alertbox.lv-alert .big{color:#FF5A5A}
+  .alertbox.lv-warn{background:rgba(255,197,61,.16)}
+  .alertbox.lv-warn .big{color:#FFC53D;font-size:44px}
+  @keyframes pulseA{0%,100%{background:rgba(255,90,90,.10)}50%{background:rgba(255,90,90,.34)}}
+  .camwrap.alerting{box-shadow:0 0 0 4px var(--danger)}
+
+  .full{width:100%;background:var(--primary);color:#0B0B0F;border:none;border-radius:999px;
+    padding:14px;font-size:15.5px;font-weight:800;cursor:pointer;margin-top:11px}
+  .full.stop{background:var(--danger);color:#fff}
+  .full:disabled{opacity:.45}
+  .row{display:flex;gap:9px;margin-top:11px}
+  .row .full{margin-top:0}
+
+  /* 감지 대상 */
+  .tchips{display:flex;flex-wrap:wrap;gap:7px}
+  .tchip{background:var(--surface);border:1px solid var(--border);border-radius:999px;
+    padding:8px 13px;font-size:12.5px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:6px}
+  .tchip.sel{background:var(--primary);color:#0B0B0F;border-color:var(--primary);font-weight:800}
+  .tchip .x{font-weight:900;opacity:.6}
+  .addrow{display:flex;gap:8px;margin-top:9px}
+  .addrow input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+    color:var(--text);padding:10px 12px;font-size:13px}
+  .addrow input::placeholder{color:var(--dim)}
+  .tnote{font-size:10.5px;color:var(--dim);margin-top:8px;line-height:1.5}
+
+  /* 감지 모드 */
+  .modes{display:flex;gap:7px}
+  .mbox{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:13px;
+    padding:11px 6px;text-align:center;cursor:pointer;transition:.15s}
+  .mbox.sel{border-color:var(--primary);background:var(--surface2)}
+  .mbox .e{font-size:19px}
+  .mbox .t{font-size:12px;font-weight:800;margin-top:3px}
+  .mbox.sel .t{color:var(--primary-soft)}
+  .mbox .s{font-size:10px;color:var(--dim);margin-top:2px;line-height:1.3}
+
+  .setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+  .setrow:last-child{margin-bottom:0}
+  .setrow .lab{font-size:12.5px;font-weight:700}
+  .setrow .sub{font-size:10.5px;color:var(--dim);margin-top:2px}
+  .setrow input[type=range]{flex:1;accent-color:var(--primary);max-width:150px}
+  .val{font-size:12.5px;font-weight:800;color:var(--accent);min-width:52px;text-align:right}
+  .sw{width:46px;height:26px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);
+    position:relative;cursor:pointer;flex-shrink:0}
+  .sw .knob{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--dim);transition:.2s}
+  .sw.on{background:var(--primary)}
+  .sw.on .knob{left:23px;background:#0B0B0F}
+
+  .stats{display:flex;gap:9px}
+  .stat{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+  .stat .n{font-size:19px;font-weight:900;color:var(--primary)}
+  .stat .l{font-size:10.5px;color:var(--dim);margin-top:2px}
+
+  .ev{display:flex;gap:10px;background:var(--surface);border:1px solid var(--border);
+    border-left-width:4px;border-radius:12px;padding:11px;margin-bottom:9px}
+  .ev.normal{border-left-color:var(--success)}
+  .ev.warn{border-left-color:var(--warn)}
+  .ev.alert{border-left-color:var(--danger)}
+  .ev img{width:64px;height:64px;object-fit:cover;border-radius:8px;flex-shrink:0;background:#000}
+  .ev .body{flex:1;min-width:0}
+  .ev .top{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+  .ev .st{font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px}
+  .ev.normal .st{background:rgba(61,220,151,.15);color:var(--success)}
+  .ev.warn .st{background:rgba(255,197,61,.15);color:var(--warn)}
+  .ev.alert .st{background:rgba(255,90,90,.15);color:var(--danger)}
+  .ev .tm{font-size:10.5px;color:var(--dim)}
+  .ev .tx{font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--text)}
+  .ev .new{font-size:10px;font-weight:900;color:#0B0B0F;background:var(--accent);
+    padding:2px 7px;border-radius:999px}
+  .ev.newest{animation:pop .5s ease-out}
+  @keyframes pop{0%{transform:translateY(-8px);opacity:0}100%{transform:none;opacity:1}}
+  .loghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .loghead .cnt{font-size:10.5px;color:var(--dim);font-weight:600}
+
+  /* 접었다 펴는 섹션 */
+  .acc{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    margin-bottom:10px;overflow:hidden}
+  .acc.open{border-color:#39394a}
+  .acchead{display:flex;align-items:center;gap:9px;padding:14px;cursor:pointer;user-select:none}
+  .acchead:active{background:var(--surface2)}
+  .acchead .ttl{flex:1;font-size:13.5px;font-weight:800}
+  .acchead .meta{font-size:10.5px;color:var(--dim);font-weight:600;text-align:right;
+    max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acchead .arw{color:var(--dim);font-size:12px;transition:transform .2s;flex-shrink:0}
+  .acc.open .acchead .arw{transform:rotate(180deg);color:var(--primary)}
+  .acc.open .acchead .ttl{color:var(--primary-soft)}
+  .accbody{display:none;padding:0 14px 14px}
+  .acc.open .accbody{display:block;animation:slidein .22s ease-out}
+  @keyframes slidein{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:none}}
+  .acc .accbody .card{background:var(--surface2)}
+  .acc .accbody .mbox,.acc .accbody .stat,.acc .accbody .tchip,.acc .accbody .ev{background:var(--surface2)}
+  .badge-new{background:var(--danger);color:#fff;font-size:10px;font-weight:900;
+    padding:2px 7px;border-radius:999px;margin-left:6px}
+
+  .msg{color:var(--dim);font-size:12.5px;text-align:center;padding:14px 0}
+  .err{color:var(--danger);font-size:12.5px;line-height:1.6}
+  .hidden{display:none}
+  .foot{color:var(--dim);font-size:10.5px;text-align:center;margin-top:18px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">100<b>°10</b> AI 감시 <span style="font-size:10px;color:var(--dim);font-weight:600">서버판</span></div>
+    <div class="live" id="liveInd"><span class="led"></span><span id="liveTxt">대기중</span></div>
+  </header>
+
+  <div class="card">
+    <div class="keyrow">
+      <input id="serverUrl" type="url" placeholder="https://vlm-guard-server.onrender.com" />
+    </div>
+    <div class="keyrow" style="margin-top:8px">
+      <input id="apikey" type="password" placeholder="기기 키 (dev_...)" />
+      <button class="btn" id="saveKey">연결</button>
+    </div>
+    <div class="keystate" id="keyState">관리자 화면에서 발급받은 기기 키를 입력하세요.</div>
+  </div>
+
+  <div class="camwrap" id="camWrap">
+    <video id="video" playsinline autoplay muted></video>
+    <div class="ovl" id="ovlTime">--:--:--</div>
+    <div class="ovl r" id="ovlMotion">움직임 0%</div>
+    <div class="motionbar" id="mBar"></div>
+    <div class="flash" id="flash"></div>
+    <div class="alertbox hidden" id="alertBox">
+      <div class="big" id="alertBig">경고</div>
+      <div class="why" id="alertWhy"></div>
+    </div>
+    <div class="camoff" id="camOff">
+      <div class="emj">🎥</div>
+      <div>카메라를 켜고 감시를 시작하세요</div>
+    </div>
+  </div>
+  <canvas id="capCanvas" class="hidden"></canvas>
+  <canvas id="mCanvas" class="hidden" width="64" height="48"></canvas>
+
+  <div class="tnote" id="usageInfo" style="text-align:center;margin-top:10px"></div>
+  <button class="full" id="startCam">📷 카메라 켜기</button>
+  <div class="row hidden" id="ctrls">
+    <button class="full" id="watchBtn" style="flex:1">▶ 감시 시작</button>
+    <button class="btn" id="flipBtn" style="padding:14px 15px">🔄</button>
+  </div>
+
+  <!-- ▼ 감지 기록 -->
+  <div class="acc open" data-acc="log">
+    <div class="acchead">
+      <span class="ttl">📋 감지 기록</span>
+      <span class="meta" id="logCnt"></span>
+      <span class="arw">▾</span>
+    </div>
+    <div class="accbody">
+      <div class="stats">
+        <div class="stat"><div class="n" id="stMotion">0</div><div class="l">움직임 감지</div></div>
+        <div class="stat"><div class="n" id="stAi">0</div><div class="l">AI 분석</div></div>
+        <div class="stat"><div class="n" id="stAlert">0</div><div class="l">경고</div></div>
+      </div>
+      <div id="log" style="margin-top:11px"><div class="msg">아직 기록이 없습니다.</div></div>
+    </div>
+  </div>
+
+  <!-- ▼ 감지 대상 -->
+  <div class="acc" data-acc="target">
+    <div class="acchead">
+      <span class="ttl">🎯 감지 대상</span>
+      <span class="meta" id="targetMeta"></span>
+      <span class="arw">▾</span>
+    </div>
+    <div class="accbody">
+      <div class="tchips" id="tChips"></div>
+      <div class="addrow">
+        <input id="newTarget" placeholder="직접 입력 (예: 고양이, 택배 도착)" maxlength="24" />
+        <button class="btn" id="addTarget">+ 추가</button>
+      </div>
+      <div class="tnote" id="tNote"></div>
+    </div>
+  </div>
+
+  <!-- ▼ 현장 지식 (RAG) -->
+  <div class="acc" data-acc="know">
+    <div class="acchead">
+      <span class="ttl">📚 현장 지식</span>
+      <span class="meta" id="knowMeta"></span>
+      <span class="arw">▾</span>
+    </div>
+    <div class="accbody">
+      <div class="tnote" style="margin-top:0">
+        이 내용은 <b>서버(관리자 화면)</b>에 저장된 값입니다. 연결하면 자동으로 불러옵니다.<br/>여기서 수정한 내용은 이 기기에만 임시 적용되며, 정식 수정은 관리자 화면에서 하세요.
+      </div>
+      <textarea id="knowText" placeholder="예)&#10;직원은 검은색 유니폼을 입는다&#10;우리 집에 고양이 두 마리가 있다&#10;택배기사는 문 앞에 두고 간다&#10;창문 밖 나뭇가지가 바람에 흔들린다"></textarea>
+      <div class="addrow" style="margin-top:9px">
+        <button class="btn" id="saveKnow" style="flex:1">💾 저장</button>
+        <button class="btn" id="clearKnow">비우기</button>
+      </div>
+
+      <div class="sec" style="margin:16px 0 8px">⏰ 시간대별 규칙</div>
+      <div class="tnote" style="margin-top:0">
+        시간에 따라 경고 기준을 다르게 적용합니다. 예: 야간에는 출입 자체를 경고로.
+      </div>
+      <div id="ruleList"></div>
+      <div class="addrow">
+        <input id="ruleFrom" placeholder="22" maxlength="2" style="max-width:64px;text-align:center" />
+        <span style="align-self:center;color:var(--dim);font-size:12px">시 ~</span>
+        <input id="ruleTo" placeholder="6" maxlength="2" style="max-width:64px;text-align:center" />
+        <span style="align-self:center;color:var(--dim);font-size:12px">시</span>
+      </div>
+      <div class="addrow">
+        <input id="ruleText" placeholder="이 시간엔 출입이 없어야 함 (있으면 경고)" maxlength="60" />
+        <button class="btn" id="addRule">+ 추가</button>
+      </div>
+
+      <div class="setrow" style="margin-top:14px">
+        <div><div class="lab">🕘 과거 기록 참조</div><div class="sub">최근 감지 내역을 함께 주어 반복·배회를 잡아냄</div></div>
+        <div class="sw on" id="histSw"><div class="knob"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ▼ 감지 모드 -->
+  <div class="acc" data-acc="mode">
+    <div class="acchead">
+      <span class="ttl">🎛 감지 모드</span>
+      <span class="meta" id="modeMeta"></span>
+      <span class="arw">▾</span>
+    </div>
+    <div class="accbody">
+  <div class="modes">
+    <div class="mbox sel" id="modeBig">
+      <div class="e">🚶</div><div class="t">일반 감시</div><div class="s">사람·동물·문 열림</div>
+    </div>
+    <div class="mbox" id="modeSmall">
+      <div class="e">🐜</div><div class="t">벌레 감지</div><div class="s">바퀴벌레·작은 벌레</div>
+    </div>
+    <div class="mbox" id="modeDoor">
+      <div class="e">🚪</div><div class="t">출입 카운터</div><div class="s">사람 수 세기</div>
+    </div>
+  </div>
+  <div class="tnote" id="mNote"></div>
+
+  <!-- 출입 카운터 패널 -->
+  <div id="doorPanel" class="hidden">
+    <div class="stats" style="margin-top:12px">
+      <div class="stat"><div class="n" id="cIn" style="color:var(--success)">0</div><div class="l">입장</div></div>
+      <div class="stat"><div class="n" id="cOut" style="color:var(--primary-soft)">0</div><div class="l">퇴장</div></div>
+      <div class="stat"><div class="n" id="cNow" style="color:var(--accent)">0</div><div class="l">현재 인원</div></div>
+    </div>
+    <div class="card" style="margin-top:11px">
+      <div class="setrow">
+        <div><div class="lab">이동 축</div><div class="sub" id="axisSub">자동 — 좌우·상하 중 더 크게 움직인 쪽으로 판별</div></div>
+        <button class="btn" id="axisBtn">자동</button>
+      </div>
+      <div class="setrow">
+        <div><div class="lab">들어오는 방향</div><div class="sub" id="dirSub">왼쪽 → 오른쪽 이동을 "입장"으로 셈</div></div>
+        <button class="btn" id="dirBtn">⇄ 바꾸기</button>
+      </div>
+      <div class="setrow">
+        <div><div class="lab">🔍 진단 모드</div><div class="sub">안 세어질 때 그 이유를 기록에 남김</div></div>
+        <div class="sw" id="diagSw"><div class="knob"></div></div>
+      </div>
+      <div class="setrow">
+        <div><div class="lab">AI로 사람 확인</div><div class="sub">그림자·동물을 걸러냄 (통행 1회당 비용)</div></div>
+        <div class="sw on" id="verifySw"><div class="knob"></div></div>
+      </div>
+      <div class="setrow">
+        <div><div class="lab">카운터 초기화</div><div class="sub">입장·퇴장 기록을 0으로</div></div>
+        <button class="btn" id="resetCnt">↺ 초기화</button>
+      </div>
+    </div>
+    <div class="tnote">
+      📌 설치 팁: 폰을 문 옆에 두고 사람이 <b>화면을 가로질러</b> 지나가도록 놓으세요.
+      정면에서 다가오는 각도는 방향 판별이 어렵습니다.
+    </div>
+  </div>
+    </div>
+  </div>
+
+  <!-- ▼ 감시 설정 -->
+  <div class="acc" data-acc="set">
+    <div class="acchead">
+      <span class="ttl">🔧 감시 설정</span>
+      <span class="meta"></span>
+      <span class="arw">▾</span>
+    </div>
+    <div class="accbody">
+  <div class="card" style="margin-bottom:0">
+    <div class="setrow">
+      <div><div class="lab">감지 민감도</div><div class="sub">높을수록 작은 움직임도 감지</div></div>
+      <input type="range" id="sens" min="1" max="10" value="5" />
+      <div class="val" id="sensVal">5</div>
+    </div>
+    <div class="setrow">
+      <div><div class="lab">⚡ 빠른 응답 모드</div><div class="sub" id="fastSub">고속 AI 사용 (1~2초) · 끄면 더 정확하지만 느림</div></div>
+      <div class="sw on" id="fastSw"><div class="knob"></div></div>
+    </div>
+    <div class="setrow">
+      <div><div class="lab">AI 분석 최소 간격</div><div class="sub">비용 절약 · 불꽃 등 긴급상황은 즉시 분석</div></div>
+      <input type="range" id="cool" min="5" max="120" step="5" value="15" />
+      <div class="val" id="coolVal">15초</div>
+    </div>
+    <div class="setrow">
+      <div><div class="lab">🔥 불꽃·밝은 빛 감지</div><div class="sub">라이터·촛불처럼 작아도 밝은 것을 별도 감지</div></div>
+      <div class="sw on" id="flameSw"><div class="knob"></div></div>
+    </div>
+    <div class="setrow">
+      <div><div class="lab">경고 시 알림음</div><div class="sub">이상 상황이면 "삐" 소리로 알림</div></div>
+      <div class="sw on" id="sndSw"><div class="knob"></div></div>
+    </div>
+    <div class="setrow">
+      <div><div class="lab">🔊 음성 경고</div><div class="sub">경고 시 "확인 필요"를 3번 말합니다</div></div>
+      <div class="sw on" id="voiceSw"><div class="knob"></div></div>
+    </div>
+    <div class="setrow">
+      <div><div class="lab">🔔 경고 테스트</div><div class="sub">경고음·음성·화면표시를 한꺼번에 확인</div></div>
+      <button class="btn" id="testAlert" style="background:var(--primary);color:#0B0B0F;border-color:var(--primary)">▶ 테스트</button>
+    </div>
+    <div class="setrow">
+      <div><div class="lab">음성만 테스트</div><div class="sub">"확인 필요" 음성만 들어보기</div></div>
+      <button class="btn" id="testVoice">▶ 들어보기</button>
+    </div>
+    <div class="setrow">
+      <div><div class="lab">화면 꺼짐 방지</div><div class="sub">감시 중 화면이 안 꺼지게 유지</div></div>
+      <div class="sw on" id="wakeSw"><div class="knob"></div></div>
+    </div>
+  </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    ⚠️ 카메라는 <b>https 주소</b>에서만 켜집니다.<br/>
+    움직임은 폰에서 자체 감지하고, 분석은 서버가 처리합니다.<br/>
+    모든 기록은 서버에 저장되어 관리자 화면에서 확인할 수 있습니다.
+  </div>
+</div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+
+/* 속도 우선 / 정확도 우선 모델 */
+var MODEL_FAST='claude-haiku-4-5-20251001';   // 빠름 (1~2초)
+var MODEL_ACC ='claude-sonnet-5';             // 정확 (3~8초)
+function currentModel(){ return state.fast ? MODEL_FAST : MODEL_ACC; }
+
+/* ===== 📚 현장 지식 (RAG) ===== */
+// 저장된 지식·규칙·최근 기록 중 '지금 상황에 해당하는 것만' 골라
+// AI에게 함께 전달한다. 이것이 이 앱의 RAG 역할이다.
+
+function initKnowledge(){
+  // 저장해둔 지식·규칙 불러오기 (state 정의 이후에 실행됨)
+  try{ state.knowledge = localStorage.getItem('vlm_know') || ''; }catch(e){}
+  try{ state.rules = JSON.parse(localStorage.getItem('vlm_rules')||'[]'); }catch(e){ state.rules=[]; }
+  state.useHist = (localStorage.getItem('vlm_hist')!=='0');
+
+  $('knowText').value = state.knowledge;
+  $('histSw').classList.toggle('on', state.useHist);
+  renderRules();
+  updateKnowMeta();
+}
+$('saveKnow').onclick=function(){
+  state.knowledge=$('knowText').value.trim();
+  try{ localStorage.setItem('vlm_know', state.knowledge); }catch(e){}
+  updateKnowMeta();
+  $('saveKnow').textContent='✓ 저장됨';
+  setTimeout(function(){ $('saveKnow').textContent='💾 저장'; },1500);
+};
+$('clearKnow').onclick=function(){
+  $('knowText').value=''; state.knowledge='';
+  try{ localStorage.setItem('vlm_know',''); }catch(e){}
+  updateKnowMeta();
+};
+$('histSw').onclick=function(){
+  state.useHist=!state.useHist;
+  $('histSw').classList.toggle('on',state.useHist);
+  localStorage.setItem('vlm_hist', state.useHist?'1':'0');
+};
+
+function knowLines(){
+  return state.knowledge.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+}
+function updateKnowMeta(){
+  var n=knowLines().length, r=state.rules.length;
+  var parts=[];
+  if(n) parts.push('지식 '+n+'줄');
+  if(r) parts.push('규칙 '+r+'개');
+  $('knowMeta').textContent = parts.length? parts.join(' · ') : '비어 있음';
+}
+
+/* 시간대 규칙 */
+$('addRule').onclick=function(){
+  var f=parseInt($('ruleFrom').value,10), t=parseInt($('ruleTo').value,10);
+  var txt=$('ruleText').value.trim();
+  if(isNaN(f)||isNaN(t)||f<0||f>23||t<0||t>23){ alert('시간은 0~23 사이 숫자로 입력하세요.'); return; }
+  if(!txt){ alert('규칙 내용을 입력하세요.'); return; }
+  if(state.rules.length>=8){ alert('규칙은 최대 8개까지 추가할 수 있습니다.'); return; }
+  state.rules.push({from:f,to:t,text:txt});
+  saveRules(); renderRules(); updateKnowMeta();
+  $('ruleFrom').value=''; $('ruleTo').value=''; $('ruleText').value='';
+};
+function saveRules(){ try{ localStorage.setItem('vlm_rules', JSON.stringify(state.rules)); }catch(e){} }
+function renderRules(){
+  if(!state.rules.length){ $('ruleList').innerHTML='<div class="tnote" style="margin-top:0">등록된 규칙이 없습니다.</div>'; return; }
+  var h='';
+  state.rules.forEach(function(r,i){
+    h+='<div class="tchip sel" data-i="'+i+'" style="width:100%;justify-content:space-between;margin-bottom:7px">'
+      +esc(r.from+'시~'+r.to+'시 · '+r.text)+'<span class="x" data-del="'+i+'">✕</span></div>';
+  });
+  $('ruleList').innerHTML=h;
+  Array.prototype.forEach.call($('ruleList').children,function(el){
+    el.onclick=function(ev){
+      var d=ev&&ev.target&&ev.target.getAttribute&&ev.target.getAttribute('data-del');
+      if(d!==null&&d!==undefined&&d!==''){
+        state.rules.splice(parseInt(d,10),1);
+        saveRules(); renderRules(); updateKnowMeta();
+      }
+    };
+  });
+}
+
+// 지금 시각에 해당하는 규칙만 골라낸다 (자정을 넘는 구간도 처리)
+function activeRules(hour){
+  var h=(hour===undefined)? new Date().getHours() : hour;
+  return state.rules.filter(function(r){
+    if(r.from<=r.to) return h>=r.from && h<r.to;      // 예: 9~18
+    return h>=r.from || h<r.to;                        // 예: 22~6 (자정 넘김)
+  });
+}
+
+// 최근 기록을 짧게 요약해 맥락으로 제공
+function recentContext(n){
+  if(!state.useHist || !state.events.length) return '';
+  return state.events.slice(0, n||5).map(function(e){
+    return '- '+e.time+' '+String(e.text).replace(/\n/g,' ').slice(0,45);
+  }).join('\n');
+}
+
+// 위 세 가지를 합쳐 프롬프트에 넣을 블록을 만든다
+function knowledgeBlock(){
+  var out='';
+  var lines=knowLines();
+  if(lines.length){
+    out += '\n[이 장소에 대해 알아둘 것]\n';
+    lines.forEach(function(l){ out += '- '+l+'\n'; });
+    out += '위 내용에 해당하는 상황은 정상으로 판단한다.\n';
+  }
+  var ar=activeRules();
+  if(ar.length){
+    out += '\n[지금 시각('+new Date().getHours()+'시)에 적용되는 규칙]\n';
+    ar.forEach(function(r){ out += '- '+r.text+'\n'; });
+    out += '이 규칙에 어긋나면 상태를 주의 또는 경고로 올린다.\n';
+  }
+  var hist=recentContext(5);
+  if(hist){
+    out += '\n[최근 감지 기록]\n'+hist+'\n';
+    out += '같은 대상이 짧은 시간에 반복해서 나타나면 배회로 보고 주의로 판단한다.\n';
+  }
+  return out;
+}
+
+/* ===== 접었다 펴는 섹션 (아코디언) ===== */
+function initAccordion(){
+  var accs=[];
+  // data-acc 속성을 가진 요소들을 찾는다
+  var all=document.getElementsByClassName ? document.getElementsByClassName('acc') : [];
+  for(var i=0;i<all.length;i++) accs.push(all[i]);
+
+  accs.forEach(function(acc){
+    var key=acc.getAttribute('data-acc');
+    // 저장된 열림 상태 복원 (기록은 기본 열림, 나머지는 기본 닫힘)
+    var saved=localStorage.getItem('vlm_acc_'+key);
+    if(saved==='1') acc.classList.add('open');
+    else if(saved==='0') acc.classList.remove('open');
+
+    var head=acc.getElementsByClassName('acchead')[0];
+    if(!head) return;
+    head.onclick=function(){
+      var open=!acc.classList.contains('open');
+      acc.classList.toggle('open', open);
+      localStorage.setItem('vlm_acc_'+key, open?'1':'0');
+      if(key==='log' && open) clearLogBadge();
+    };
+  });
+}
+
+// 접혀 있을 때 새 경고가 오면 헤더에 표시
+function markLogBadge(){
+  var acc=findAcc('log');
+  if(!acc || acc.classList.contains('open')) return;
+  state.unseen=(state.unseen||0)+1;
+  updateLogMeta();
+}
+function clearLogBadge(){ state.unseen=0; updateLogMeta(); }
+function findAcc(key){
+  var all=document.getElementsByClassName('acc');
+  for(var i=0;i<all.length;i++){ if(all[i].getAttribute('data-acc')===key) return all[i]; }
+  return null;
+}
+function updateLogMeta(){
+  var n=state.events.length;
+  var un=state.unseen||0;
+  $('logCnt').textContent = un>0 ? ('🔴 새 기록 '+un+'건') : (n? (n+'건') : '');
+}
+
+/* ===== 감지 대상 ===== */
+var DEFAULT_TARGETS=[
+  {name:'수상한 행동을 하는 사람', on:true,  fixed:true},
+  {name:'바퀴벌레·작은 벌레',     on:false, fixed:true},
+  {name:'침입·무단 출입',         on:true,  fixed:true},
+  {name:'사람이 쓰러짐',          on:true,  fixed:true},
+  {name:'연기·불',                on:true,  fixed:true},
+  {name:'물건이 없어지거나 옮겨짐',on:false, fixed:true},
+  {name:'동물 출현',              on:false, fixed:true}
+];
+
+var state={
+  key:'', server:'', connected:false, stream:null, facing:'environment', watching:false, busy:false,
+  prev:null, lastAi:0, wakeLock:null, sound:true, wake:true,
+  cMotion:0, cAi:0, cAlert:0, events:[], audio:null, mTimer:null, clock:null,
+  targets:[], detect:'big',
+  flame:true, prevBright:null, lastReason:'motion', bannerTimer:null,
+  voice:true, voicePrimed:false,
+  fast:true, lastMs:0, lastAiReason:'', elapsedTimer:null,
+  /* 출입 카운터 */
+  cIn:0, cOut:0, track:[], trackShot:null, lastMotionT:0,
+  doorLtrIsIn:true, verify:true, doorBusy:false,
+  doorAxis:'auto', diag:false, unseen:0,
+  /* 현장 지식 (RAG) */
+  knowledge:'', rules:[], useHist:true
+};
+state.doorLtrIsIn = (localStorage.getItem('vlm_dir')!=='0');
+state.doorAxis = localStorage.getItem('vlm_axis') || 'auto';
+state.fast = (localStorage.getItem('vlm_fast')!=='0');
+
+/* 저장된 감지 대상 불러오기 */
+try{
+  var saved=JSON.parse(localStorage.getItem('vlm_targets')||'null');
+  state.targets = (saved && saved.length) ? saved : DEFAULT_TARGETS.slice();
+}catch(e){ state.targets=DEFAULT_TARGETS.slice(); }
+state.detect = localStorage.getItem('vlm_detect')||'big';
+
+function saveTargets(){
+  try{ localStorage.setItem('vlm_targets', JSON.stringify(state.targets)); }catch(e){}
+}
+function activeTargets(){
+  return state.targets.filter(function(t){return t.on;}).map(function(t){return t.name;});
+}
+
+/* 감지 대상을 반영한 시스템 프롬프트 생성 */
+function buildSystem(){
+  var list=activeTargets();
+  var s =
+  '너는 매장·현장 감시 카메라의 AI 분석관이다. 움직임이 감지되어 촬영된 정지 이미지를 보고 상황을 판단한다.\n' +
+  '반드시 아래 형식으로만, 아주 간결하게 답한다.\n' +
+  '상태: 정상 | 주의 | 경고  (셋 중 하나만)\n' +
+  '상황: 지금 무슨 일이 일어나는지 한 문장\n' +
+  '대상: 무엇이 보이는지 (사람 수, 물체 등. 불분명하면 "불명")\n' +
+  '조치: 필요한 조치 한 줄 (없으면 "불필요")\n';
+
+  if(list.length){
+    s += '\n[중점 감시 대상] 다음 항목을 특히 주의 깊게 확인한다:\n';
+    list.forEach(function(n,i){ s += (i+1)+'. '+n+'\n'; });
+    s += '위 항목 중 하나라도 발견되면 상태를 반드시 "주의" 또는 "경고"로 하고, ' +
+         '상황 줄 맨 앞에 [발견: 항목명] 을 붙인다. 확실하지 않고 의심만 되면 "주의"로 한다.\n';
+  }
+
+  s += knowledgeBlock();       // 📚 현장 지식·시간대 규칙·최근 기록 반영
+
+  s += '\n판단 기준 — 정상: 평범한 방문·통행·일상 활동이며 위 감시 대상이 없음. ' +
+       '주의: 감시 대상으로 의심되는 것이 있거나 애매한 상황. ' +
+       '경고: 감시 대상이 명확히 확인되거나 즉시 확인이 필요한 상황.\n' +
+       '사람의 외모·신원을 추측하지 말고 행동과 상황만 서술한다. ' +
+       '작은 벌레를 찾을 때는 바닥·벽·구석의 작고 어두운 점이 이동했는지 살핀다. ' +
+       '화면이 어둡거나 불분명하면 상태는 정상으로 두고 상황에 그 사실을 적는다.';
+  return s;
+}
+
+/* 대상 칩 렌더 */
+function renderTargets(){
+  var h='';
+  state.targets.forEach(function(t,i){
+    h+='<div class="tchip'+(t.on?' sel':'')+'" data-i="'+i+'">'+esc(t.name)+
+       (t.fixed?'':'<span class="x" data-del="'+i+'">✕</span>')+'</div>';
+  });
+  $('tChips').innerHTML=h;
+  Array.prototype.forEach.call($('tChips').children,function(el){
+    el.onclick=function(ev){
+      var del=ev && ev.target && ev.target.getAttribute && ev.target.getAttribute('data-del');
+      var i=parseInt(el.getAttribute('data-i'),10);
+      if(del!==null && del!==undefined && del!==''){
+        state.targets.splice(parseInt(del,10),1);
+      } else {
+        state.targets[i].on=!state.targets[i].on;
+      }
+      saveTargets(); renderTargets(); updateNote();
+    };
+  });
+  updateNote();
+}
+function esc(s){ return String(s).replace(/[<>&"]/g,function(c){
+  return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]; }); }
+
+function updateNote(){
+  var list=activeTargets();
+  $('tNote').textContent = list.length
+    ? ('현재 감시 중: '+list.join(' · '))
+    : '⚠️ 선택된 감지 대상이 없습니다. 일반적인 이상 상황만 판단합니다.';
+  $('targetMeta').textContent = list.length ? (list.length+'개 감시중') : '없음';
+}
+
+$('addTarget').onclick=addTarget;
+$('newTarget').onkeydown=function(e){ if(e.key==='Enter') addTarget(); };
+function addTarget(){
+  var v=$('newTarget').value.trim();
+  if(!v) return;
+  if(state.targets.length>=14){ alert('감지 대상은 최대 14개까지 추가할 수 있습니다.'); return; }
+  state.targets.push({name:v,on:true,fixed:false});
+  $('newTarget').value='';
+  saveTargets(); renderTargets();
+}
+renderTargets();
+
+/* ===== 감지 모드 ===== */
+function setDetect(m){
+  state.detect=m;
+  localStorage.setItem('vlm_detect',m);
+  $('modeBig').classList.toggle('sel',m==='big');
+  $('modeSmall').classList.toggle('sel',m==='small');
+  $('modeDoor').classList.toggle('sel',m==='door');
+  $('doorPanel').classList.toggle('hidden', m!=='door');
+
+  var c=$('mCanvas');
+  if(m==='small'){ c.width=160; c.height=120; }
+  else if(m==='door'){ c.width=80; c.height=60; }
+  else { c.width=64; c.height=48; }
+
+  state.prev=null;            // 해상도가 바뀌므로 기준 프레임 초기화
+  state.track=[]; state.trackShot=null;
+
+  if(m==='small'){
+    $('mNote').textContent='정밀 모드: 화면을 4배 세밀하게 봅니다. 작은 벌레는 카메라를 바닥 가까이(30~60cm) 두고, 조명을 켜두세요.';
+  } else if(m==='door'){
+    $('mNote').textContent='출입 카운터: 사람이 화면을 좌우로 가로질러 지나가면 이동 방향으로 입장·퇴장을 셉니다.';
+  } else {
+    $('mNote').textContent='일반 모드: 사람·동물 등 큰 움직임에 적합합니다. 배터리 소모가 적습니다.';
+  }
+  $('modeMeta').textContent =
+    (m==='small') ? '🐜 벌레 감지' : (m==='door' ? '🚪 출입 카운터' : '🚶 일반 감시');
+}
+$('modeBig').onclick=function(){ setDetect('big'); };
+$('modeSmall').onclick=function(){ setDetect('small'); };
+$('modeDoor').onclick=function(){ setDetect('door'); };
+initAccordion();
+initKnowledge();
+setDetect(state.detect);
+
+/* 출입 카운터 설정 */
+function updateDirLabel(){
+  var ax=state.doorAxis;
+  var fwd, bwd;
+  if(ax==='y'){ fwd='위 → 아래'; bwd='아래 → 위'; }
+  else { fwd='왼쪽 → 오른쪽'; bwd='오른쪽 → 왼쪽'; }
+  $('dirSub').textContent = (state.doorLtrIsIn ? fwd : bwd)+' 이동을 "입장"으로 셈'
+    + (ax==='auto' ? ' (자동 축일 땐 좌우 기준)' : '');
+
+  $('axisBtn').textContent = (ax==='auto')?'자동':(ax==='x'?'좌우':'상하');
+  $('axisSub').textContent =
+    (ax==='auto') ? '자동 — 좌우·상하 중 더 크게 움직인 쪽으로 판별'
+  : (ax==='x')   ? '좌우 이동만으로 판별 (문을 옆에서 촬영)'
+                 : '상하 이동만으로 판별 (문을 위나 정면에서 촬영)';
+}
+updateDirLabel();
+$('dirBtn').onclick=function(){
+  state.doorLtrIsIn=!state.doorLtrIsIn;
+  localStorage.setItem('vlm_dir', state.doorLtrIsIn?'1':'0');
+  updateDirLabel();
+};
+$('axisBtn').onclick=function(){
+  state.doorAxis = (state.doorAxis==='auto') ? 'x' : (state.doorAxis==='x' ? 'y' : 'auto');
+  localStorage.setItem('vlm_axis', state.doorAxis);
+  updateDirLabel();
+};
+$('diagSw').onclick=function(){
+  state.diag=!state.diag;
+  $('diagSw').classList.toggle('on',state.diag);
+};
+$('verifySw').onclick=function(){
+  state.verify=!state.verify;
+  $('verifySw').classList.toggle('on',state.verify);
+};
+$('resetCnt').onclick=function(){
+  state.cIn=0; state.cOut=0; renderCounts();
+};
+function renderCounts(){
+  $('cIn').textContent=state.cIn;
+  $('cOut').textContent=state.cOut;
+  $('cNow').textContent=Math.max(0, state.cIn-state.cOut);
+}
+
+/* ===== API 키 ===== */
+/* ===== 서버 연결 =====
+   API 키는 더 이상 앱에 넣지 않습니다. 서버가 대신 AI를 호출합니다. */
+state.key    = localStorage.getItem('vlm_devkey') || '';
+state.server = localStorage.getItem('vlm_server') || 'https://vlm-guard-server.onrender.com';
+if(state.key)    $('apikey').value=state.key;
+if(state.server) $('serverUrl').value=state.server;
+
+$('saveKey').onclick=function(){ connectServer(); };
+
+function normalizeUrl(u){
+  u=String(u||'').trim().replace(/\/+$/,'');
+  if(u && !/^https?:\/\//.test(u)) u='https://'+u;
+  return u;
+}
+
+function connectServer(){
+  state.server=normalizeUrl($('serverUrl').value);
+  state.key=$('apikey').value.trim();
+  if(!state.server || !state.key){
+    markKey(false,'서버 주소와 기기 키를 모두 입력하세요.');
+    return;
+  }
+  localStorage.setItem('vlm_server',state.server);
+  localStorage.setItem('vlm_devkey',state.key);
+  markKey(false,'연결 중…');
+
+  fetch(state.server+'/api/config',{ headers:{'X-Device-Key':state.key} })
+    .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error||'연결 실패'); return j; }); })
+    .then(function(cfg){
+      state.connected=true;
+      applyServerConfig(cfg);
+      var u=cfg.usage;
+      markKey(true, '✓ '+(cfg.tenant?cfg.tenant.name:'')+' · '+cfg.device.name
+        + (u ? ' · 이번 달 '+u.used.toLocaleString()+'/'+u.limit.toLocaleString()+'회' : ''));
+    })
+    .catch(function(e){
+      state.connected=false;
+      markKey(false,'연결 실패: '+e.message);
+    });
+}
+
+/* 서버에 저장된 현장 설정을 앱에 반영 (관리자 화면에서 수정한 내용) */
+function applyServerConfig(cfg){
+  var site=cfg.site||{};
+  if(typeof site.knowledge==='string'){
+    state.knowledge=site.knowledge;
+    if($('knowText')) $('knowText').value=site.knowledge;
+  }
+  if(Array.isArray(site.rules)) state.rules=site.rules;
+  if(Array.isArray(site.targets) && site.targets.length){
+    // 서버 설정을 기준으로 감지 대상 목록을 맞춘다
+    state.targets=site.targets.map(function(n){ return {name:n,on:true,fixed:false}; });
+    renderTargets();
+  }
+  if(cfg.device && cfg.device.detectMode) setDetect(cfg.device.detectMode);
+  renderRules(); updateKnowMeta();
+  updateUsageBar(cfg.usage);
+}
+
+function updateUsageBar(u){
+  if(!u || !$('usageInfo')) return;
+  $('usageInfo').textContent =
+    '이번 달 '+u.used.toLocaleString()+' / '+u.limit.toLocaleString()+'회 사용 ('+u.percent+'%)'
+    + (u.remaining<=0 ? ' — 한도 소진' : '');
+  $('usageInfo').style.color = u.percent>=90 ? 'var(--danger)'
+                             : (u.percent>=70 ? 'var(--warn)' : 'var(--dim)');
+}
+
+function markKey(ok,msg){
+  var el=$('keyState');
+  el.textContent = msg || (ok?'✓ 연결되었습니다.':'관리자 화면에서 발급받은 기기 키를 입력하세요.');
+  el.classList.toggle('ok',!!ok);
+}
+if(state.key && state.server) connectServer();
+
+/* ===== 설정 ===== */
+$('sens').oninput=function(){ $('sensVal').textContent=$('sens').value; };
+$('cool').oninput=function(){ $('coolVal').textContent=$('cool').value+'초'; };
+$('sndSw').onclick=function(){ state.sound=!state.sound; $('sndSw').classList.toggle('on',state.sound); };
+$('flameSw').onclick=function(){
+  state.flame=!state.flame;
+  $('flameSw').classList.toggle('on',state.flame);
+  state.prevBright=null;
+};
+$('fastSw').classList.toggle('on', state.fast);
+$('fastSw').onclick=function(){
+  state.fast=!state.fast;
+  $('fastSw').classList.toggle('on',state.fast);
+  localStorage.setItem('vlm_fast', state.fast?'1':'0');
+  $('fastSub').textContent = state.fast
+    ? '고속 AI 사용 (1~2초) · 끄면 더 정확하지만 느림'
+    : '정밀 AI 사용 (3~8초) · 켜면 훨씬 빨라짐';
+};
+$('voiceSw').onclick=function(){
+  state.voice=!state.voice;
+  $('voiceSw').classList.toggle('on',state.voice);
+  if(state.voice) primeVoice();
+};
+$('testVoice').onclick=function(){
+  primeVoice();
+  speakAlert(true);
+};
+// 경고가 실제로 어떻게 울리는지 한 번에 확인 (AI 판정을 기다리지 않고 점검)
+$('testAlert').onclick=function(){
+  primeVoice();
+  showBanner('alert','상태: 경고\n상황: 테스트 경고입니다');
+  alarm();
+  speakAlert(true);
+  flash();
+  addEvent('alert','🔔 테스트 경고 — 소리·화면 표시 점검','data:,',0);
+};
+$('wakeSw').onclick=function(){
+  state.wake=!state.wake; $('wakeSw').classList.toggle('on',state.wake);
+  if(!state.wake) releaseWake(); else if(state.watching) requestWake();
+};
+
+/* ===== 카메라 ===== */
+$('startCam').onclick=startCamera;
+$('flipBtn').onclick=function(){
+  state.facing=(state.facing==='environment')?'user':'environment';
+  startCamera();
+};
+function startCamera(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    return camError('이 브라우저는 카메라를 지원하지 않습니다.');
+  }
+  if(state.stream){ state.stream.getTracks().forEach(function(t){t.stop();}); }
+  navigator.mediaDevices.getUserMedia({
+    video:{facingMode:{ideal:state.facing},width:{ideal:1280},height:{ideal:960}},audio:false
+  }).then(function(s){
+    state.stream=s;
+    $('video').srcObject=s;
+    $('camOff').classList.add('hidden');
+    $('startCam').classList.add('hidden');
+    $('ctrls').classList.remove('hidden');
+    startClock();
+    try{ if(!state.audio) state.audio=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+  }).catch(function(e){
+    var n=e&&e.name;
+    if(n==='NotAllowedError') camError('카메라 권한이 거부됐어요.<br/>주소창 자물쇠 아이콘 → 카메라 → 허용 후 새로고침하세요.');
+    else if(n==='NotFoundError') camError('카메라를 찾을 수 없습니다.');
+    else camError('카메라를 켜지 못했어요.<br/>주소가 https 로 시작하는지 확인해주세요.');
+  });
+}
+function camError(html){
+  $('camOff').classList.remove('hidden');
+  $('camOff').innerHTML='<div class="emj">🚫</div><div class="err">'+html+'</div>';
+}
+function startClock(){
+  if(state.clock) clearInterval(state.clock);
+  state.clock=setInterval(function(){ $('ovlTime').textContent=nowStr(); },1000);
+}
+function nowStr(){
+  var d=new Date();
+  var p=function(n){return n<10?('0'+n):(''+n);};
+  return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+
+/* ===== 감시 시작/중지 ===== */
+$('watchBtn').onclick=function(){ state.watching ? stopWatch() : startWatch(); };
+
+function startWatch(){
+  if(!state.connected){ alert('먼저 상단에서 서버에 연결하세요.'); return; }
+  state.watching=true; state.prev=null; state.lastAi=0;
+  primeVoice();   // 버튼을 누른 지금(사용자 동작) 음성 엔진을 깨워둔다
+  $('watchBtn').textContent='■ 감시 중지';
+  $('watchBtn').classList.add('stop');
+  $('liveInd').classList.add('on'); $('liveTxt').textContent='감시중';
+  if(state.wake) requestWake();
+  state.track=[]; state.trackShot=null;
+  var iv = state.detect==='small' ? 300 : (state.detect==='door' ? 150 : 350);
+  state.mTimer=setInterval(checkMotion, iv);
+}
+function stopWatch(){
+  state.watching=false;
+  if(state.mTimer){ clearInterval(state.mTimer); state.mTimer=null; }
+  $('watchBtn').textContent='▶ 감시 시작';
+  $('watchBtn').classList.remove('stop');
+  $('liveInd').classList.remove('on'); $('liveTxt').textContent='대기중';
+  $('mBar').style.width='0%';
+  hideBanner();
+  stopElapsed();
+  releaseWake();
+}
+
+/* ===== 화면 꺼짐 방지 ===== */
+function requestWake(){
+  if(!navigator.wakeLock) return;
+  navigator.wakeLock.request('screen').then(function(l){ state.wakeLock=l; }).catch(function(){});
+}
+function releaseWake(){
+  if(state.wakeLock){ try{ state.wakeLock.release(); }catch(e){} state.wakeLock=null; }
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible' && state.watching && state.wake) requestWake();
+});
+
+/* ===== 움직임 감지 ===== */
+function checkMotion(){
+  var v=$('video');
+  if(!v.videoWidth) return;
+  var c=$('mCanvas'), ctx=c.getContext('2d');
+  ctx.drawImage(v,0,0,c.width,c.height);
+  var d=ctx.getImageData(0,0,c.width,c.height).data;
+
+  var total=c.width*c.height;
+  var gray=new Uint8Array(total);
+  var bright=0;          // 불꽃 후보: 매우 밝은 픽셀 수
+  for(var i=0,j=0;i<d.length;i+=4,j++){
+    var lum=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114)|0;
+    gray[j]=lum;
+    // 불꽃 판별: 빨강이 매우 강하고 파랑보다 훨씬 높은 '주황~붉은색'
+    // 주황 불꽃은 흰빛보다 계산상 밝기(lum)가 낮으므로 빨강 채널을 기준으로 본다.
+    // 흰 옷·형광등(R=G=B)이나 푸른 화면빛은 자연히 제외된다.
+    if(d[i]>=200 && (d[i]-d[i+2])>=60) bright++;
+  }
+
+  /* ── 불꽃 감지: 면적이 아니라 '밝은 점이 새로 생겼는가'로 판단 ── */
+  var flameHit=false, flameInc=0;
+  if(state.flame){
+    if(state.prevBright!==null){
+      flameInc = bright - state.prevBright;
+      // 정밀 모드는 픽셀이 4배 많으므로 기준도 높인다
+      var flameNeed = (state.detect==='small') ? 4 : 2;
+      if(flameInc >= flameNeed) flameHit=true;
+    }
+    state.prevBright = bright;
+  } else {
+    state.prevBright = null;
+  }
+
+  if(!state.prev || state.prev.length!==total){
+    state.prev=gray;
+    if(flameHit) onMotion('flame');   // 첫 프레임에도 불꽃은 놓치지 않음
+    return;
+  }
+
+  var sens=parseInt($('sens').value,10);
+  if(!(sens>=1&&sens<=10)) sens=5;
+
+  // 정밀 모드는 미세한 명암 변화도 잡도록 문턱을 낮춘다
+  var pixDelta = (state.detect==='small') ? 12 : 18;
+
+  var changed=0, sumX=0, sumY=0;
+  var doorMode=(state.detect==='door');
+  for(var k=0;k<total;k++){
+    var dv=gray[k]-state.prev[k];
+    if(dv<0) dv=-dv;
+    if(dv>pixDelta){
+      changed++;
+      if(doorMode){ sumX += (k % c.width); sumY += ((k / c.width)|0); }
+    }
+  }
+  state.prev=gray;
+
+  /* 🚪 출입 카운터 모드: 움직임의 이동 방향을 추적
+     — 단, 불꽃(화재)은 어느 모드에서든 놓치면 안 되므로 함께 검사한다 */
+  if(doorMode){
+    if(flameHit){ onMotion('flame'); return; }
+    doorTrack(changed, sumX, sumY, c.width, c.height, total, sens);
+    return;
+  }
+
+  var pct=Math.round(changed/total*1000)/10;   // 소수 첫째자리
+  var hit=false;
+
+  if(state.detect==='small'){
+    // 작은 물체는 비율이 아니라 '바뀐 픽셀 수'로 판단 (민감도 1→60px, 10→6px)
+    var need=Math.max(5, 66-6*sens);
+    hit = changed>=need;
+    $('ovlMotion').textContent = flameHit ? ('🔥 밝은빛 +'+flameInc) : ('변화 '+changed+'px');
+    $('mBar').style.width=Math.min(100, changed/need*100)+'%';
+  } else {
+    var threshold=Math.max(3, 13-sens);
+    hit = pct>=threshold;
+    $('ovlMotion').textContent = flameHit ? ('🔥 밝은빛 +'+flameInc) : ('움직임 '+Math.round(pct)+'%');
+    $('mBar').style.width=Math.min(100, pct*4)+'%';
+  }
+
+  if(flameHit) onMotion('flame');
+  else if(hit) onMotion('motion');
+}
+
+/* ===== 🚪 출입 카운터 ===== */
+// 사람이 화면을 가로지르는 동안 '움직임의 중심 X좌표'를 계속 기록해두었다가,
+// 움직임이 끝나면 시작→끝 이동 방향으로 입장/퇴장을 판정한다.
+function doorTrack(changed, sumX, sumY, width, height, total, sens){
+  var need = Math.round(total * Math.max(1, 9-sens) / 100);   // 민감도 5 → 화면의 4%
+  var now = Date.now();
+
+  if(changed >= need){
+    var cx = (sumX/changed)/width;            // 0(왼쪽) ~ 1(오른쪽)
+    var cy = (sumY/changed)/height;           // 0(위)   ~ 1(아래)
+    state.track.push({x:cx, y:cy});
+    state.lastMotionT = now;
+    // 사람이 화면 가운데쯤 왔을 때 한 번만 사진을 찍어둔다 (AI 확인용)
+    if(!state.trackShot && cx>0.25 && cx<0.75){ state.trackShot = capture(800); }
+    $('ovlMotion').textContent = '추적 '+state.track.length+'프레임';
+    $('mBar').style.width = Math.round(cx*100)+'%';
+  } else if(state.track.length && (now - state.lastMotionT) > 400){
+    finalizeTrack();                          // 움직임이 멈추면 판정
+  }
+}
+
+var MIN_FRAMES = 3;     // 최소 추적 프레임 (150ms × 3 = 0.45초)
+var MIN_DISP   = 0.15;  // 최소 이동량 (화면의 15%)
+
+function finalizeTrack(){
+  var t = state.track.slice();
+  var shot = state.trackShot;
+  state.track=[]; state.trackShot=null;
+  $('mBar').style.width='0%';
+  $('ovlMotion').textContent='대기중';
+
+  // 유효한 움직임이 하나 잡혔으므로 통계에 반영
+  state.cMotion++; $('stMotion').textContent=state.cMotion;
+
+  if(t.length < MIN_FRAMES){
+    diag('통행 무시 — 너무 짧음 ('+t.length+'프레임, 최소 '+MIN_FRAMES+')', shot);
+    return;
+  }
+
+  var sx=(t[0].x+t[1].x)/2, ex=(t[t.length-1].x+t[t.length-2].x)/2;
+  var sy=(t[0].y+t[1].y)/2, ey=(t[t.length-1].y+t[t.length-2].y)/2;
+  var dx=ex-sx, dy=ey-sy;
+
+  // 축 결정: 자동이면 더 많이 움직인 쪽을 사용
+  var axis=state.doorAxis;
+  if(axis==='auto') axis = (Math.abs(dx)>=Math.abs(dy)) ? 'x' : 'y';
+  var disp = (axis==='x') ? dx : dy;
+
+  if(Math.abs(disp) < MIN_DISP){
+    diag('통행 무시 — 이동량 부족 (좌우 '+pctStr(dx)+', 상하 '+pctStr(dy)+
+         ' / 최소 '+Math.round(MIN_DISP*100)+'%)', shot);
+    return;
+  }
+
+  // 사람은 연속적으로 움직인다. 한 프레임(0.15초) 만에 화면을 절반 가까이
+  // 건너뛰었다면 조명 변화·화면 깜빡임일 가능성이 크다.
+  var maxStep=0;
+  for(var i=1;i<t.length;i++){
+    var st = (axis==='x') ? Math.abs(t[i].x-t[i-1].x) : Math.abs(t[i].y-t[i-1].y);
+    if(st>maxStep) maxStep=st;
+  }
+  if(maxStep > 0.45){
+    diag('통행 무시 — 순간적인 변화 (한 번에 '+Math.round(maxStep*100)+'% 점프, 조명 변화로 추정)', shot);
+    return;
+  }
+
+  // x축: 오른쪽으로 이동 = 정방향 / y축: 아래로 이동 = 정방향
+  var forward = disp>0;
+  var entering = state.doorLtrIsIn ? forward : !forward;
+  registerCrossing(entering, shot);
+}
+
+function pctStr(v){ return (v>=0?'+':'')+Math.round(v*100)+'%'; }
+
+// 진단 모드일 때만 '왜 안 세었는지'를 기록에 남긴다
+function diag(msg, shot){
+  if(!state.diag) return;
+  addEvent('normal', '🔍 '+msg, shot||'data:,', 0);
+}
+
+function registerCrossing(entering, shot){
+  if(state.doorBusy) return;
+  var dirTxt = entering ? '입장' : '퇴장';
+
+  // AI 확인을 끄거나, 사진이 없거나, 키가 없으면 바로 카운트
+  if(!state.verify || !shot || !state.connected){
+    applyCount(entering, 1, dirTxt+' 1명 (자체 판정)', shot, 0, 'normal');
+    return;
+  }
+
+  state.doorBusy=true;
+  var t0=Date.now();
+  $('liveTxt').textContent='확인중';
+  startElapsed(t0);
+
+  verifyPerson(shot.split(',')[1], entering)
+    .then(function(r){
+      state.cAi++; $('stAi').textContent=state.cAi;      // AI 분석 횟수 반영
+      var ms=Date.now()-t0;
+
+      if(!r.isPerson || r.count<=0){
+        // 사람이 아니면 세지 않고 기록만 남긴다
+        addEvent('normal','통행 무시 — 사람 아님('+(r.kind||'불명')+')', shot, ms);
+        return;
+      }
+
+      // 카운트 + 이상 상황 판정을 함께 처리
+      var label = dirTxt+' '+r.count+'명 (AI 확인)';
+      if(r.situation) label += '\n' + r.situation;
+      applyCount(entering, r.count, label, shot, ms, r.level);
+
+      if(r.level==='alert'){
+        state.cAlert++; $('stAlert').textContent=state.cAlert;
+        alarm(); speakAlert(); flash();
+        showBanner('alert', '상태: 경고\n상황: '+(r.situation||'이상 상황'));
+      } else if(r.level==='warn'){
+        showBanner('warn', '상태: 주의\n상황: '+(r.situation||'확인 필요'));
+      }
+    })
+    .catch(function(){
+      // 확인 실패 시에는 놓치지 않도록 일단 카운트
+      applyCount(entering, 1, dirTxt+' 1명 (확인 실패, 자체 판정)', shot, Date.now()-t0, 'normal');
+    })
+    .then(function(){
+      state.doorBusy=false;
+      stopElapsed();
+      if(state.watching) $('liveTxt').textContent='감시중';
+    });
+}
+
+function applyCount(entering, n, label, shot, ms, level){
+  if(entering) state.cIn+=n; else state.cOut+=n;
+  renderCounts();
+  // 입장·퇴장은 둘 다 정상 상황이다. AI가 이상을 발견했을 때만 주의/경고로 표시.
+  addEvent(level||'normal', (entering?'⬅ ':'➡ ')+label, shot, ms||0);
+}
+
+// 출입 확인 + 이상 상황 판정 — 서버가 한 번의 AI 호출로 처리한다
+function verifyPerson(b64, entering){
+  return callServer(b64, 'door', { direction: entering ? 'in' : 'out' }).then(function(j){
+    var t = j.text || '';
+    var isPerson = (j.personCount != null)
+      ? (j.personCount > 0)
+      : /사람\s*[:：]?\s*있음/.test(t);
+    var m=t.match(/인원\s*[:：]?\s*(\d+)/);
+    var kindM=t.match(/종류\s*[:：]?\s*(사람|동물|물체|불명)/);
+    var lvl = j.level || 'normal';
+    var sit = j.situation || '';
+    return {
+      isPerson:isPerson,
+      count: (j.personCount != null) ? j.personCount : (m?parseInt(m[1],10):1),
+      kind: kindM?kindM[1]:'',
+      level: lvl,
+      situation: sit
+    };
+  });
+}
+
+function onMotion(reason){
+  state.lastReason = reason || 'motion';
+  state.cMotion++; $('stMotion').textContent=state.cMotion;
+
+  var coolSec=parseInt($('cool').value,10);
+  if(!(coolSec>=5)) coolSec=15;
+
+  if(state.lastReason==='flame'){
+    // 🔥 새로 발생한 불꽃은 쿨다운을 완전히 건너뛰고 즉시 분석한다.
+    //    같은 불꽃이 계속 감지될 때만 2초 간격으로 제한해 과금 폭주를 막는다.
+    coolSec = (state.lastAiReason==='flame') ? 2 : 0;
+  }
+
+  var now=Date.now();
+  if(state.busy || (now-state.lastAi)<coolSec*1000) return;
+  state.lastAi=now;
+  state.lastAiReason=state.lastReason;
+  analyze();
+}
+
+/* ===== 캡처 & 분석 ===== */
+function capture(maxW){
+  var v=$('video'), c=$('capCanvas');
+  var w=v.videoWidth, h=v.videoHeight;
+  if(!w||!h) return null;
+  var s=Math.min(1, maxW/Math.max(w,h));
+  c.width=Math.round(w*s); c.height=Math.round(h*s);
+  c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+  // 화질을 낮춰 업로드 시간을 줄인다 (벌레 정밀모드만 예외적으로 조금 높임)
+  var q = (state.detect==='small') ? 0.75 : 0.65;
+  return c.toDataURL('image/jpeg', q);
+}
+
+function analyze(){
+  // 작은 벌레만 고해상도가 필요. 불꽃은 밝아서 낮은 해상도로도 충분 → 업로드 시간 단축
+  var big=capture(state.detect==='small' ? 1100 : 900);
+  var thumb=capture(160);
+  if(!big) return;
+  state.busy=true;
+  var t0=Date.now();
+  $('liveTxt').textContent='분석중';
+  startElapsed(t0);
+
+  var ask;
+  if(state.lastReason==='flame'){
+    ask='화면에 갑자기 밝은 빛이 나타나 촬영된 장면입니다. '+
+        '불꽃(라이터·촛불·성냥·화재)인지, 아니면 조명·손전등·화면빛·햇빛 반사 같은 일반적인 빛인지 구분해서 판단해주세요. '+
+        '불꽃이 맞으면 상태를 경고로 하고, 단순 조명이면 정상으로 하세요.';
+  } else if(state.detect==='small'){
+    ask='움직임이 감지되어 촬영된 화면입니다. 작은 벌레나 이물질이 있는지 바닥과 구석을 자세히 살펴 판단해주세요.';
+  } else {
+    ask='움직임이 감지되어 촬영된 화면입니다. 상황을 판단해주세요.';
+  }
+
+  callClaude(big.split(',')[1], ask)
+    .then(function(text){
+      state.cAi++; $('stAi').textContent=state.cAi;
+      var lvl=levelOf(text);
+      if(lvl==='alert'){
+        state.cAlert++; $('stAlert').textContent=state.cAlert;
+        alarm();        // 삐 소리
+        speakAlert();   // "확인 필요" 3회
+        flash();
+      }
+      showBanner(lvl, text);
+      addEvent(lvl,text,thumb,(Date.now()-t0));
+    })
+    .catch(function(e){
+      addEvent('warn','분석 실패: '+(e.message||e), thumb, (Date.now()-t0));
+    })
+    .then(function(){
+      state.busy=false;
+      state.lastMs=Date.now()-t0;
+      stopElapsed();
+      if(state.watching) $('liveTxt').textContent='감시중';
+    });
+}
+
+/* 분석 진행 시간 실시간 표시 */
+function startElapsed(t0){
+  stopElapsed();
+  state.elapsedTimer=setInterval(function(){
+    var s=((Date.now()-t0)/1000).toFixed(1);
+    $('liveTxt').textContent='분석중 '+s+'초';
+  },100);
+}
+function stopElapsed(){
+  if(state.elapsedTimer){ clearInterval(state.elapsedTimer); state.elapsedTimer=null; }
+}
+
+/* ===== 화면 경고 표시 ===== */
+function situationOf(text){
+  // "상황: ..." 줄만 뽑아 짧게
+  var lines=String(text).split('\n');
+  for(var i=0;i<lines.length;i++){
+    var l=lines[i].trim();
+    if(l.indexOf('상황')===0){
+      return l.replace(/^상황\s*[:：]\s*/,'').slice(0,60);
+    }
+  }
+  return '';
+}
+function showBanner(lvl, text){
+  var box=$('alertBox');
+  if(state.bannerTimer){ clearTimeout(state.bannerTimer); state.bannerTimer=null; }
+
+  if(lvl==='normal'){ hideBanner(); return; }
+
+  $('alertBig').textContent = (lvl==='alert') ? '⚠ 경고' : '● 주의';
+  $('alertWhy').textContent = situationOf(text);
+  box.className = 'alertbox lv-'+lvl;
+  $('camWrap').classList.toggle('alerting', lvl==='alert');
+
+  // 경고는 20초, 주의는 10초 표시 후 자동으로 사라짐
+  state.bannerTimer=setTimeout(hideBanner, lvl==='alert'?20000:10000);
+}
+function hideBanner(){
+  $('alertBox').className='alertbox hidden';
+  $('camWrap').classList.remove('alerting');
+  if(state.bannerTimer){ clearTimeout(state.bannerTimer); state.bannerTimer=null; }
+}
+
+function levelOf(t){
+  var head=t.split('\n')[0]||'';
+  if(head.indexOf('경고')>=0) return 'alert';
+  if(head.indexOf('주의')>=0) return 'warn';
+  return 'normal';
+}
+
+function addEvent(lvl,text,thumb,ms){
+  // unshift = 배열 맨 앞에 추가 → 항상 최신 기록이 맨 위
+  state.events.unshift({lvl:lvl,text:text,thumb:thumb,time:nowStr(),ts:Date.now(),ms:ms||0});
+  if(state.events.length>30) state.events.pop();   // 가장 오래된 것부터 제거
+  markLogBadge();
+  renderLog();
+}
+
+function agoStr(ts){
+  var s=Math.floor((Date.now()-ts)/1000);
+  if(s<60) return '방금';
+  if(s<3600) return Math.floor(s/60)+'분 전';
+  return Math.floor(s/3600)+'시간 전';
+}
+
+function renderLog(){
+  updateLogMeta();
+  if(!state.events.length){ $('log').innerHTML='<div class="msg">아직 기록이 없습니다.</div>'; return; }
+  var box=document.createElement('div');
+  state.events.forEach(function(ev,idx){
+    var lab = ev.lvl==='alert' ? '⚠ 경고' : (ev.lvl==='warn' ? '● 주의' : '✓ 정상');
+    var d=document.createElement('div');
+    d.className='ev '+ev.lvl+(idx===0?' newest':'');
+    var img=document.createElement('img'); img.src=ev.thumb; img.alt='';
+    var body=document.createElement('div'); body.className='body';
+    var top=document.createElement('div'); top.className='top';
+    var st=document.createElement('span'); st.className='st'; st.textContent=lab;
+    if(idx===0){
+      var nw=document.createElement('span'); nw.className='new'; nw.textContent='NEW';
+      top.appendChild(st); top.appendChild(nw);
+    } else {
+      top.appendChild(st);
+    }
+    var tm=document.createElement('span'); tm.className='tm';
+    tm.textContent = ev.time + (ev.ts ? (' · '+agoStr(ev.ts)) : '')
+                   + (ev.ms ? (' · '+(ev.ms/1000).toFixed(1)+'초 소요') : '');
+    top.appendChild(tm);
+    var tx=document.createElement('div'); tx.className='tx'; tx.textContent=ev.text;
+    body.appendChild(top); body.appendChild(tx);
+    d.appendChild(img); d.appendChild(body);
+    box.appendChild(d);
+  });
+  $('log').innerHTML=''; $('log').appendChild(box);
+}
+
+/* ===== 음성 경고 ("확인 필요" 3회) ===== */
+// 모바일 브라우저는 사용자가 화면을 한 번 누른 뒤라야 소리를 낼 수 있어서
+// 버튼을 누르는 시점에 미리 음성 엔진을 깨워둔다.
+function primeVoice(){
+  if(state.voicePrimed) return;
+  if(typeof window==='undefined' || !window.speechSynthesis) return;
+  try{
+    var u=new window.SpeechSynthesisUtterance(' ');
+    u.volume=0; u.lang='ko-KR';
+    window.speechSynthesis.speak(u);
+    state.voicePrimed=true;
+  }catch(e){}
+}
+
+function speakAlert(force){
+  if(!force && !state.voice) return;
+  if(typeof window==='undefined' || !window.speechSynthesis){
+    // 음성 미지원 기기 → 경고음으로 대체
+    if(!force) alarm();
+    return;
+  }
+  try{
+    window.speechSynthesis.cancel();          // 이전 음성이 남아있으면 지움
+    for(var i=0;i<3;i++){                     // "확인 필요" 3번
+      var u=new window.SpeechSynthesisUtterance('확인 필요');
+      u.lang='ko-KR';
+      u.rate=1.05;
+      u.pitch=1.15;
+      u.volume=1;
+      window.speechSynthesis.speak(u);
+    }
+  }catch(e){}
+}
+
+/* ===== 알림 ===== */
+function alarm(){
+  if(!state.sound) return;
+  // 소리 엔진이 아직 없으면 이 시점에 만든다 (카메라 켜기 실패 등에도 대비)
+  if(!state.audio){
+    try{ state.audio=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+  }
+  try{
+    var ctx=state.audio;
+    if(ctx.state==='suspended') ctx.resume();
+    [0,0.35,0.7].forEach(function(off){
+      var o=ctx.createOscillator(), g=ctx.createGain();
+      o.type='square'; o.frequency.value=880;
+      g.gain.setValueAtTime(0.001,ctx.currentTime+off);
+      g.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+off+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+off+0.25);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(ctx.currentTime+off); o.stop(ctx.currentTime+off+0.3);
+    });
+  }catch(e){}
+  if(navigator.vibrate) navigator.vibrate([200,100,200]);
+}
+function flash(){
+  var f=$('flash');
+  f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
+}
+
+/* ===== Claude ===== */
+/* ===== 서버 호출 =====
+   앱은 사진만 보내고, 프롬프트 구성과 AI 호출은 서버가 합니다.
+   덕분에 API 키가 앱에 남지 않고 사용량도 서버가 관리합니다. */
+function callServer(b64, reason, extra){
+  if(!state.connected){
+    return Promise.reject(new Error('서버에 연결되지 않았습니다. 상단에서 연결하세요.'));
+  }
+  var body = Object.assign({
+    image: b64,
+    mimeType: 'image/jpeg',
+    reason: reason || 'motion',
+    fast: state.fast
+  }, extra || {});
+
+  return fetch(state.server+'/api/analyze',{
+    method:'POST',
+    headers:{ 'content-type':'application/json', 'X-Device-Key':state.key },
+    body: JSON.stringify(body)
+  }).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(j){
+      if(res.status===429){
+        // 이번 달 한도 소진 — 감시를 멈추고 안내
+        stopWatch();
+        var msg='이번 달 분석 횟수를 모두 사용했습니다 ('
+                +(j.used||'?')+'/'+(j.limit||'?')+'회). 요금제를 올리거나 다음 달을 기다려주세요.';
+        showBanner('warn','상태: 주의\n상황: '+msg);
+        throw new Error(msg);
+      }
+      if(!res.ok) throw new Error(j.error || ('서버 오류 '+res.status));
+      if(j.usage) updateUsageBar({
+        used:j.usage.used, limit:j.usage.limit,
+        remaining:Math.max(0,j.usage.limit-j.usage.used),
+        percent:j.usage.limit?Math.round(j.usage.used/j.usage.limit*100):0
+      });
+      return j;
+    });
+  });
+}
+
+/* 기존 코드와의 호환용 — 서버 응답에서 원문 텍스트만 돌려준다 */
+function callClaude(b64, askText){
+  var reason = (state.lastReason==='flame') ? 'flame'
+             : (state.detect==='small' ? 'small' : 'motion');
+  return callServer(b64, reason).then(function(j){
+    if(!j.text) throw new Error('응답이 비어 있습니다.');
+    return j.text;
+  });
+}
+</script>
+</body>
+</html>
