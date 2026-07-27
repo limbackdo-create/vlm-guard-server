@@ -1,0 +1,25 @@
+{
+  "name": "vlm-guard-server",
+  "version": "1.0.0",
+  "description": "100°10 AI 감시 서비스 백엔드 — 인증·사용량제한·AI분석·알림·결제",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "psql \"$DATABASE_URL\" -f db/schema.sql",
+    "seed": "node scripts/seed.js",
+    "invoice": "node scripts/monthly-invoice.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "nodemailer": "^6.9.14"
+  },
+  "engines": { "node": ">=18" },
+  "private": true
+}

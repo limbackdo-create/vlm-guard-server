@@ -1,0 +1,25 @@
+# Render 자동 배포 설정
+# 이 파일이 있으면 Render가 알아서 서버를 만들어 줍니다.
+# 사용법: GitHub에 올린 뒤 Render에서 "New > Blueprint" 선택
+
+services:
+  - type: web
+    name: vlm-guard-server
+    runtime: node
+    plan: free              # 무료 요금제 (15분 미사용 시 절전)
+    region: singapore       # 한국에서 가장 가까움
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SAVE_IMAGES
+        value: "false"      # 무료 요금제는 디스크가 초기화되므로 저장 안 함
+      - key: JWT_SECRET
+        generateValue: true # Render가 무작위 값을 자동 생성
+      # 아래 두 개는 Render 화면에서 직접 입력하세요
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
