@@ -8,6 +8,7 @@ const db = require('../db');
  * 성공하면 req.device, req.tenant, req.plan 이 채워진다.
  */
 async function deviceAuth(req, res, next) {
+  try {
   const key = req.get('X-Device-Key');
   if (!key) {
     return res.status(401).json({ error: '기기 키가 없습니다 (X-Device-Key 헤더 필요)' });
@@ -48,6 +49,10 @@ async function deviceAuth(req, res, next) {
     .catch(() => {});
 
   next();
+  } catch (e) {
+    console.error('[기기 인증] 오류:', e.message);
+    res.status(500).json({ error: '기기 확인 중 오류가 발생했습니다: ' + e.message });
+  }
 }
 
 /**

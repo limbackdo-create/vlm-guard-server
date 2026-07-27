@@ -16,6 +16,7 @@ function currentPeriod(d) {
  * 이 미들웨어가 없으면 통행이 잦은 현장 하나가 월 원가를 수십 배로 만듭니다.
  */
 async function checkQuota(req, res, next) {
+  try {
   const period = currentPeriod();
   const tenantId = req.tenant.id;
 
@@ -42,6 +43,10 @@ async function checkQuota(req, res, next) {
     used, limit, period,
     hint: '요금제를 올리거나 다음 달까지 기다려 주세요. 앱의 "AI 분석 최소 간격"을 늘리면 사용량이 줄어듭니다.',
   });
+  } catch (e) {
+    console.error('[사용량 확인] 오류:', e.message);
+    return res.status(500).json({ error: '사용량 확인 중 오류가 발생했습니다: ' + e.message });
+  }
 }
 
 /**
