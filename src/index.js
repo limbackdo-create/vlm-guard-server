@@ -57,6 +57,16 @@ setInterval(() => {
   } catch (e) { console.error('[정리] 실패:', e.message); }
 }, 6 * 60 * 60 * 1000);   // 6시간마다
 
+/* ── 안전장치 ──────────────────────────────────────────
+   처리되지 않은 오류가 나도 서버가 죽지 않게 한다.
+   (Node 18부터는 기본적으로 프로세스가 종료되어, 요청이 빈 응답으로 끊긴다) */
+process.on('unhandledRejection', (reason) => {
+  console.error('[처리되지 않은 오류]', reason && reason.message ? reason.message : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[예상치 못한 오류]', err && err.message ? err.message : err);
+});
+
 // 안전한 종료
 function shutdown() {
   console.log('[종료] 서버를 정리합니다...');
