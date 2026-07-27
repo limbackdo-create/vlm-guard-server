@@ -367,7 +367,7 @@
       <div class="sw on" id="sndSw"><div class="knob"></div></div>
     </div>
     <div class="setrow">
-      <div><div class="lab">🔊 음성 경고</div><div class="sub">경고 시 "확인 필요"를 3번 말합니다</div></div>
+      <div><div class="lab">🔊 음성 경고</div><div class="sub">경고 시 아래 문구를 3번 말합니다</div></div>
       <div class="sw on" id="voiceSw"><div class="knob"></div></div>
     </div>
     <div class="setrow">
@@ -375,8 +375,16 @@
       <button class="btn" id="testAlert" style="background:var(--primary);color:#0B0B0F;border-color:var(--primary)">▶ 테스트</button>
     </div>
     <div class="setrow">
-      <div><div class="lab">음성만 테스트</div><div class="sub">"확인 필요" 음성만 들어보기</div></div>
+      <div><div class="lab">음성만 테스트</div><div class="sub">문구를 소리로 들어보기</div></div>
       <button class="btn" id="testVoice">▶ 들어보기</button>
+    </div>
+    <div class="setrow" style="display:block">
+      <div class="lab" style="margin-bottom:7px">경고 음성 문구</div>
+      <div class="addrow" style="margin-top:0">
+        <input id="phraseInput" placeholder="찡찡 조심해" maxlength="30" />
+        <button class="btn" id="savePhrase">저장</button>
+      </div>
+      <div class="tnote" id="voiceInfo" style="margin-top:7px"></div>
     </div>
     <div class="setrow">
       <div><div class="lab">화면 꺼짐 방지</div><div class="sub">감시 중 화면이 안 꺼지게 유지</div></div>
@@ -710,6 +718,7 @@ $('modeSmall').onclick=function(){ setDetect('small'); };
 $('modeDoor').onclick=function(){ setDetect('door'); };
 initAccordion();
 initKnowledge();
+try{ updateVoiceInfo(); }catch(e){}
 setDetect(state.detect);
 
 /* 출입 카운터 설정 */
@@ -854,9 +863,19 @@ $('voiceSw').onclick=function(){
   $('voiceSw').classList.toggle('on',state.voice);
   if(state.voice) primeVoice();
 };
+$('savePhrase').onclick=function(){
+  var v=$('phraseInput').value.trim();
+  if(!v){ alert('문구를 입력하세요'); return; }
+  state.phrase=v;
+  localStorage.setItem('vlm_phrase', v);
+  $('savePhrase').textContent='✓ 저장됨';
+  setTimeout(function(){ $('savePhrase').textContent='저장'; },1500);
+  primeVoice(); speakAlert(true);
+};
 $('testVoice').onclick=function(){
   primeVoice();
   speakAlert(true);
+  setTimeout(updateVoiceInfo, 400);
 };
 // 경고가 실제로 어떻게 울리는지 한 번에 확인 (AI 판정을 기다리지 않고 점검)
 $('testAlert').onclick=function(){
@@ -1258,7 +1277,7 @@ function analyze(){
       if(lvl==='alert'){
         state.cAlert++; $('stAlert').textContent=state.cAlert;
         alarm();        // 삐 소리
-        speakAlert();   // "확인 필요" 3회
+        speakAlert();   // 설정한 문구 3회
         flash();
       }
       showBanner(lvl, text);
@@ -1371,37 +1390,80 @@ function renderLog(){
   $('log').innerHTML=''; $('log').appendChild(box);
 }
 
-/* ===== 음성 경고 ("확인 필요" 3회) ===== */
-// 모바일 브라우저는 사용자가 화면을 한 번 누른 뒤라야 소리를 낼 수 있어서
-// 버튼을 누르는 시점에 미리 음성 엔진을 깨워둔다.
+/* ===== 음성 경고 =====
+   안드로이드·아이폰마다 음성엔진 상태가 달라, 한국어 목소리를 찾아 지정해준다.
+   목소리 목록은 조금 늦게 준비되므로 준비되는 시점에 다시 받아둔다. */
+
+state.phrase = localStorage.getItem('vlm_phrase') || '찡찡 조심해';
+state.voices = [];
+if($('phraseInput')) $('phraseInput').value = state.phrase;   // 저장된 문구를 입력칸에 표시
+
+function loadVoices(){
+  try{
+    if(!window.speechSynthesis) return;
+    state.voices = window.speechSynthesis.getVoices() || [];
+  }catch(e){}
+}
+loadVoices();
+try{
+  if(window.speechSynthesis && 'onvoiceschanged' in window.speechSynthesis){
+    window.speechSynthesis.onvoiceschanged = function(){ loadVoices(); updateVoiceInfo(); };
+  }
+}catch(e){}
+
+// 한국어 목소리를 우선 고르고, 없으면 아무 목소리나 쓴다
+function pickVoice(){
+  var vs = state.voices && state.voices.length ? state.voices : [];
+  if(!vs.length) loadVoices(), vs = state.voices || [];
+  for(var i=0;i<vs.length;i++){ if(/^ko/i.test(vs[i].lang||'')) return vs[i]; }
+  for(var j=0;j<vs.length;j++){ if(/ko/i.test(vs[j].name||'')) return vs[j]; }
+  return vs.length ? vs[0] : null;
+}
+
+function updateVoiceInfo(){
+  var el = $('voiceInfo'); if(!el) return;
+  if(!window.speechSynthesis){ el.textContent = '⚠️ 이 브라우저는 음성을 지원하지 않습니다.'; return; }
+  var v = pickVoice();
+  if(!v){ el.textContent = '⚠️ 사용 가능한 음성이 없습니다. 아래 "들어보기"를 한 번 눌러보세요.'; return; }
+  el.textContent = '사용 음성: ' + (v.name||'기본') + ' (' + (v.lang||'?') + ')'
+    + (/^ko/i.test(v.lang||'') ? '' : ' — 한국어 음성이 없어 발음이 어색할 수 있습니다');
+}
+
+// 모바일은 사용자가 화면을 누른 뒤라야 소리를 낼 수 있어 미리 깨워둔다
 function primeVoice(){
   if(state.voicePrimed) return;
   if(typeof window==='undefined' || !window.speechSynthesis) return;
   try{
+    loadVoices();
     var u=new window.SpeechSynthesisUtterance(' ');
     u.volume=0; u.lang='ko-KR';
     window.speechSynthesis.speak(u);
     state.voicePrimed=true;
+    setTimeout(function(){ loadVoices(); updateVoiceInfo(); }, 300);
   }catch(e){}
 }
 
 function speakAlert(force){
   if(!force && !state.voice) return;
   if(typeof window==='undefined' || !window.speechSynthesis){
-    // 음성 미지원 기기 → 경고음으로 대체
-    if(!force) alarm();
+    if(!force) alarm();          // 음성 미지원 기기 → 경고음으로 대체
     return;
   }
   try{
-    window.speechSynthesis.cancel();          // 이전 음성이 남아있으면 지움
-    for(var i=0;i<3;i++){                     // "확인 필요" 3번
-      var u=new window.SpeechSynthesisUtterance('확인 필요');
-      u.lang='ko-KR';
-      u.rate=1.05;
-      u.pitch=1.15;
-      u.volume=1;
+    window.speechSynthesis.cancel();          // 이전 음성 제거
+    var v = pickVoice();
+    var text = state.phrase || '확인 필요';
+    for(var i=0;i<3;i++){                     // 3번 반복
+      var u=new window.SpeechSynthesisUtterance(text);
+      u.lang = (v && v.lang) ? v.lang : 'ko-KR';
+      if(v) u.voice = v;
+      u.rate=1.0; u.pitch=1.1; u.volume=1;
       window.speechSynthesis.speak(u);
     }
+    // 일부 기기에서 재생이 멈춰 있는 경우 재개
+    setTimeout(function(){
+      try{ if(window.speechSynthesis.paused) window.speechSynthesis.resume(); }catch(e){}
+    }, 200);
   }catch(e){}
 }
 
