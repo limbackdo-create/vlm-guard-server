@@ -9,8 +9,23 @@ const storage = require('../services/storage');
 
 const router = express.Router();
 
+/**
+ * async 라우터의 오류를 잡아 항상 JSON 응답을 보장한다.
+ * 이게 없으면 DB 오류 시 응답이 비어 화면이 "불러오는 중…"에서 멈춘다.
+ */
+function wrap(fn) {
+  return function (req, res, next) {
+    Promise.resolve(fn(req, res, next)).catch((e) => {
+      console.error('[관리자 API 오류]', req.method, req.path, '-', e.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: '서버 처리 중 오류가 발생했습니다: ' + e.message });
+      }
+    });
+  };
+}
+
 /* ── 회원가입 / 로그인 ─────────────────────────────── */
-router.post('/signup', async (req, res) => {
+router.post('/signup', wrap(async (req, res) => {
   const { name, email, password, phone, ownerName } = req.body || {};
   if (!name || !email || !password) {
     return res.status(400).json({ error: '상호명, 이메일, 비밀번호는 필수입니다' });
@@ -32,25 +47,27 @@ router.post('/signup', async (req, res) => {
     console.error('[가입] 오류:', e.message);
     res.status(500).json({ error: '가입 처리 중 오류가 발생했습니다' });
   }
-});
+}));
 
-router.post('/login', async (req, res) => {
+router.post('/login', wrap(async (req, res) => {
   const { email, password } = req.body || {};
   const t = await db.one('SELECT * FROM tenants WHERE email = $1', [String(email || '').toLowerCase()]);
   if (!t || !(await bcrypt.compare(String(password || ''), t.password_hash))) {
     return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다' });
   }
   res.json({ token: issueToken(t), tenant: { id: t.id, name: t.name, email: t.email } });
-});
+}));
 
 /* ── 대시보드 요약 ─────────────────────────────────── */
-router.get('/summary', adminAuth, async (req, res) => {
+router.get('/summary', adminAuth, wrap(async (req, res) => {
   const id = req.auth.tenantId;
   const usage = await getUsage(id);
+  // 주의: 집계함수 FILTER 뒤에 ::int 를 바로 붙이면 PostgreSQL 문법 오류가 납니다.
+  //       반드시 전체를 괄호로 묶어야 합니다.
   const today = await db.one(
     `SELECT COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE level='alert')::int AS alerts,
-            COUNT(*) FILTER (WHERE level='warn')::int  AS warns
+            (COUNT(*) FILTER (WHERE level='alert'))::int AS alerts,
+            (COUNT(*) FILTER (WHERE level='warn'))::int  AS warns
        FROM events
       WHERE tenant_id=$1 AND created_at >= date_trunc('day', now())`, [id]);
   const devices = await db.many(
@@ -58,16 +75,16 @@ router.get('/summary', adminAuth, async (req, res) => {
        FROM devices d LEFT JOIN sites s ON s.id=d.site_id
       WHERE d.tenant_id=$1 ORDER BY d.id`, [id]);
   const doorToday = await db.one(
-    `SELECT COALESCE(SUM(person_count) FILTER (WHERE direction='in'),0)::int  AS entered,
-            COALESCE(SUM(person_count) FILTER (WHERE direction='out'),0)::int AS exited
+    `SELECT COALESCE((SUM(person_count) FILTER (WHERE direction='in')),0)::int  AS entered,
+            COALESCE((SUM(person_count) FILTER (WHERE direction='out')),0)::int AS exited
        FROM events
       WHERE tenant_id=$1 AND created_at >= date_trunc('day', now())`, [id]);
 
   res.json({ usage, today, devices, door: doorToday });
-});
+}));
 
 /* ── 이벤트 조회 ───────────────────────────────────── */
-router.get('/events', adminAuth, async (req, res) => {
+router.get('/events', adminAuth, wrap(async (req, res) => {
   const id = req.auth.tenantId;
   const { level, deviceId, limit = 50, offset = 0 } = req.query;
   const cond = ['tenant_id = $1'];
@@ -85,33 +102,33 @@ router.get('/events', adminAuth, async (req, res) => {
       ORDER BY e.created_at DESC
       LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
   res.json({ events: rows });
-});
+}));
 
 /* 저장된 감지 이미지 (본인 것만) */
-router.get('/image/:eventId', adminAuth, async (req, res) => {
+router.get('/image/:eventId', adminAuth, wrap(async (req, res) => {
   const row = await db.one(
     'SELECT image_path FROM events WHERE id=$1 AND tenant_id=$2',
     [req.params.eventId, req.auth.tenantId]);
   if (!row || !row.image_path) return res.status(404).end();
   res.sendFile(require('path').resolve(storage.imageFullPath(row.image_path)));
-});
+}));
 
 /* ── 현장 관리 ─────────────────────────────────────── */
-router.get('/sites', adminAuth, async (req, res) => {
+router.get('/sites', adminAuth, wrap(async (req, res) => {
   res.json({ sites: await db.many('SELECT * FROM sites WHERE tenant_id=$1 ORDER BY id', [req.auth.tenantId]) });
-});
+}));
 
-router.post('/sites', adminAuth, async (req, res) => {
+router.post('/sites', adminAuth, wrap(async (req, res) => {
   const { name, address } = req.body || {};
   if (!name) return res.status(400).json({ error: '현장 이름이 필요합니다' });
   const s = await db.one(
     'INSERT INTO sites (tenant_id, name, address) VALUES ($1,$2,$3) RETURNING *',
     [req.auth.tenantId, name, address || null]);
   res.json({ site: s });
-});
+}));
 
 /* 현장 지식(RAG) 수정 — 앱의 '현장 지식' 화면이 여기에 저장된다 */
-router.put('/sites/:id', adminAuth, async (req, res) => {
+router.put('/sites/:id', adminAuth, wrap(async (req, res) => {
   const { knowledge, rules, targets, name } = req.body || {};
   const s = await db.one(
     `UPDATE sites SET
@@ -127,10 +144,10 @@ router.put('/sites/:id', adminAuth, async (req, res) => {
      name ?? null]);
   if (!s) return res.status(404).json({ error: '현장을 찾을 수 없습니다' });
   res.json({ site: s });
-});
+}));
 
 /* ── 기기 관리 ─────────────────────────────────────── */
-router.post('/devices', adminAuth, async (req, res) => {
+router.post('/devices', adminAuth, wrap(async (req, res) => {
   const { name, siteId, detectMode } = req.body || {};
   if (!name) return res.status(400).json({ error: '기기 이름이 필요합니다' });
 
@@ -149,32 +166,32 @@ router.post('/devices', adminAuth, async (req, res) => {
      VALUES ($1,$2,$3,$4,$5) RETURNING id, name, device_key, detect_mode`,
     [req.auth.tenantId, siteId || null, name, key, detectMode || 'big']);
   res.json({ device: d, hint: '이 키를 현장 앱에 입력하세요. 다시 볼 수 없으니 저장해두세요.' });
-});
+}));
 
-router.delete('/devices/:id', adminAuth, async (req, res) => {
+router.delete('/devices/:id', adminAuth, wrap(async (req, res) => {
   await db.query('DELETE FROM devices WHERE id=$1 AND tenant_id=$2',
     [req.params.id, req.auth.tenantId]);
   res.json({ ok: true });
-});
+}));
 
 /* ── 요금제·청구 ───────────────────────────────────── */
-router.get('/plans', async (req, res) => {
+router.get('/plans', wrap(async (req, res) => {
   res.json({ plans: await db.many('SELECT * FROM plans ORDER BY monthly_fee') });
-});
+}));
 
-router.post('/plan', adminAuth, async (req, res) => {
+router.post('/plan', adminAuth, wrap(async (req, res) => {
   try {
     const p = await billing.changePlan(req.auth.tenantId, req.body.planCode);
     res.json({ plan: p });
   } catch (e) { res.status(400).json({ error: e.message }); }
-});
+}));
 
-router.get('/invoices', adminAuth, async (req, res) => {
+router.get('/invoices', adminAuth, wrap(async (req, res) => {
   res.json({
     invoices: await db.many(
       'SELECT * FROM invoices WHERE tenant_id=$1 ORDER BY period DESC LIMIT 24',
       [req.auth.tenantId]),
   });
-});
+}));
 
 module.exports = router;
