@@ -261,7 +261,7 @@
   <!-- ===== 설정 (전체화면 패널) ===== -->
   <div class="panel hidden" id="settingsPanel">
     <div class="panelhead">
-      <div class="ptitle">설정</div>
+      <div class="ptitle">설정 <span style="font-size:11px;font-weight:700;color:var(--dim);margin-left:6px">v2.0</span></div>
       <button class="iconbtn" id="closeSettings" aria-label="닫기">✕</button>
     </div>
     <div class="panelbody">
@@ -494,7 +494,18 @@ var $=function(id){return document.getElementById(id);};
    홈 화면에 아이콘으로 설치되어, 주소창 없이 전체화면으로 열린다. */
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('sw.js').catch(function(){});
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      // 새 버전이 있는지 즉시 확인
+      try{ reg.update(); }catch(e){}
+      setInterval(function(){ try{ reg.update(); }catch(e){} }, 60*60*1000);
+    }).catch(function(){});
+  });
+  // 새 버전이 적용되면 화면을 자동으로 새로고침한다
+  var swReloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if(swReloaded) return;
+    swReloaded=true;
+    location.reload();
   });
 }
 var deferredInstall=null;
