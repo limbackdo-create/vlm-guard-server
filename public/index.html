@@ -216,6 +216,9 @@
   .full{border-radius:999px;letter-spacing:.2px}
   .ovl{backdrop-filter:blur(6px);background:rgba(0,0,0,.45);
     border:1px solid rgba(255,255,255,.08)}
+  .closebtn{padding:9px 16px;border-radius:12px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text);font-size:14px;font-weight:800;cursor:pointer}
+  .closebtn:active{opacity:.7}
 </style>
 </head>
 <body>
@@ -261,8 +264,8 @@
   <!-- ===== 설정 (전체화면 패널) ===== -->
   <div class="panel hidden" id="settingsPanel">
     <div class="panelhead">
-      <div class="ptitle">설정 <span style="font-size:11px;font-weight:700;color:var(--dim);margin-left:6px">v2.0</span></div>
-      <button class="iconbtn" id="closeSettings" aria-label="닫기">✕</button>
+      <div class="ptitle">설정 <span style="font-size:11px;font-weight:700;color:var(--dim);margin-left:6px">v2.1</span></div>
+      <button class="closebtn" id="closeSettings">✕ 닫기</button>
     </div>
     <div class="panelbody">
   <button class="full hidden" id="installBtn" style="margin:0 0 12px">📲 홈 화면에 앱으로 설치</button>
@@ -293,6 +296,7 @@
         <div class="stat"><div class="n" id="stAlert">0</div><div class="l">경고</div></div>
       </div>
       <div id="log" style="margin-top:11px"><div class="msg">아직 기록이 없습니다.</div></div>
+      <button class="full" id="backToCam" style="margin:18px 0 30px;background:var(--surface2);color:var(--text);border:1px solid var(--border)">← 카메라 화면으로 돌아가기</button>
     </div>
   </div>
 
@@ -890,14 +894,23 @@ if(state.server) $('serverUrl').value=state.server;
 $('saveKey').onclick=function(){ connectServer(); };
 
 /* 설정 패널 열기·닫기 */
-$('openSettings').onclick=function(){
+function openSettings(){
   $('settingsPanel').classList.remove('hidden');
   document.body.style.overflow='hidden';
-};
-$('closeSettings').onclick=function(){
+  // 폰의 '뒤로가기' 버튼으로도 닫히도록 기록을 남긴다
+  try{ history.pushState({panel:'settings'}, ''); }catch(e){}
+}
+function closeSettings(fromBack){
   $('settingsPanel').classList.add('hidden');
   document.body.style.overflow='';
-};
+  if(!fromBack){ try{ if(history.state && history.state.panel==='settings') history.back(); }catch(e){} }
+}
+$('openSettings').onclick=function(){ openSettings(); };
+$('closeSettings').onclick=function(){ closeSettings(); };
+if($('backToCam')) $('backToCam').onclick=function(){ closeSettings(); };
+window.addEventListener('popstate', function(){
+  if(!$('settingsPanel').classList.contains('hidden')) closeSettings(true);
+});
 
 if($('installBtn')) $('installBtn').onclick=function(){
   if(!deferredInstall){
