@@ -4,13 +4,12 @@
  * 중요: 감지 분석(/api/*)은 절대 캐시하지 않는다. 항상 서버로 보내야 한다.
  * 화면 파일만 캐시하되, 새 버전이 있으면 자동으로 갱신한다.
  */
-const CACHE = 'vlm-guard-v7';
+const CACHE = 'warm-letter-v1';
 const SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
+  './icon.svg',
 ];
 
 self.addEventListener('install', (e) => {
